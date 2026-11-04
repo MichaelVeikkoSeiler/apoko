@@ -231,3 +231,4 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .item .thumb { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; grid-row: span 2; background: var(--bg); }
 .item.has-photo .badges { grid-column: 2 / -1; }
 .suggestion.picked { border-color: var(--primary); background: var(--primary-soft); }
+.scan-foot .btn.wide + .btn.wide { margin-top: 8px; }

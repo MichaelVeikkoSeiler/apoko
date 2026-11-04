@@ -1,7 +1,7 @@
 import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
 import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, formById } from './knowledge.js';
 import * as store from './store.js';
-import { startScanner } from './scanner.js';
+import { startScanner, decodeImage } from './scanner.js';
 import { lookupSwissDrug, searchByText, guessForm } from './drugdb.js';
 import { lookupOpenProduct } from './productdb.js';
 import * as photos from './photos.js';
@@ -399,6 +399,14 @@ $('#recognizeInput').addEventListener('change', async e => {
     const big = await photos.resizeImage(file, 1800, 0.9);
     // Das Foto gleich als Produktfoto übernehmen, wenn noch keines da ist
     if (!$('#photoImg').getAttribute('src')) setPendingPhoto(await photos.resizeImage(file));
+    // 1. Ist ein Strichcode oder DataMatrix-Code im Bild? Der ist zuverlässiger als Text.
+    info.textContent = 'Suche Strichcode im Foto …';
+    const code = await decodeImage(big).catch(() => null);
+    if (code && parseBarcode(code).type !== 'text') {
+      await applyScan(code);
+      return;
+    }
+    // 2. Sonst den aufgedruckten Text lesen
     const text = await recognizeText(big, m => {
       if (m.status === 'recognizing text') info.textContent = `Text wird erkannt … ${Math.round(m.progress * 100)} %`;
       else if (/load|initializ/.test(m.status)) info.textContent = 'Texterkennung wird vorbereitet (nur beim ersten Mal) …';
@@ -470,6 +478,7 @@ async function openScanner(handler, hint) {
   scanHandler = handler;
   $('#manualCode').value = '';
   $('#scanStatus').textContent = 'Kamera wird gestartet …';
+  $('#btnScanPhoto').hidden = handler !== applyScan;
   scanDlg.showModal();
   // Nicht das Eingabefeld fokussieren, sonst öffnet sich die Tastatur und verdeckt die Kamera
   $('#btnScanClose').focus();
@@ -486,6 +495,10 @@ function closeScanner() {
 }
 scanDlg.addEventListener('close', () => { stopScan?.(); stopScan = null; });
 $('#btnScanClose').addEventListener('click', closeScanner);
+$('#btnScanPhoto').addEventListener('click', () => {
+  closeScanner();
+  $('#recognizeInput').click();
+});
 $('#btnManual').addEventListener('click', () => {
   const v = $('#manualCode').value.trim();
   if (!v) return;

@@ -14,6 +14,15 @@ test('GS1-DataMatrix einer Schweizer Packung', () => {
   assert.equal(r.serial, 'SN9876543');
 });
 
+test('Führendes FNC1/GS-Zeichen (so liefert es ZXing)', () => {
+  const r = parseBarcode(`${GS}01076805168007331728043010AB123${GS}21XYZ987`);
+  assert.equal(r.type, 'gs1');
+  assert.equal(r.gtin, '07680516800733');
+  assert.equal(r.expiry, '2028-04-30');
+  assert.equal(r.batch, 'AB123');
+  assert.equal(r.serial, 'XYZ987');
+});
+
 test('Herstelldatum (11) und Tag 00 = Monatsende', () => {
   const r = parseBarcode(`010768012345678111250315172802001012345`);
   assert.equal(r.prodDate, '2025-03-15');
