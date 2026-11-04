@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    # jeden Montag die Swissmedic-Liste neu laden
+    - cron: '17 3 * * 1'
 
 permissions:
   contents: read
@@ -33,6 +36,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Swissmedic-Liste der zugelassenen Packungen laden
+        # schlägt das fehl, geht die App trotzdem online (dann ohne Namensvorschlag)
+        continue-on-error: true
+        run: |
+          pip install openpyxl
+          mkdir -p data
+          python scripts/build_swissmedic.py --download data/swissmedic.json
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .

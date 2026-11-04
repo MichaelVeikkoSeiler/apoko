@@ -1,0 +1,4 @@
+node_modules/
+# wird beim Veröffentlichen aus der Swissmedic-Liste erzeugt
+data/swissmedic.json
+__pycache__/

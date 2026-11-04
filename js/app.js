@@ -2,6 +2,7 @@ import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
 import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, formById } from './knowledge.js';
 import * as store from './store.js';
 import { startScanner } from './scanner.js';
+import { lookupSwissDrug } from './drugdb.js';
 import { buildShareCode, shareLink, parseShareCode, sharedItems } from './share.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -262,7 +263,7 @@ $('#btnDelete').addEventListener('click', () => {
 });
 $('#fab').addEventListener('click', () => openItem(null));
 
-function applyScan(raw) {
+async function applyScan(raw) {
   const r = parseBarcode(raw);
   const info = [];
   if (r.type === 'text' || r.type === 'unknown') {
@@ -270,19 +271,33 @@ function applyScan(raw) {
     $('#scanInfo').textContent = 'Code gelesen, aber kein Produkt-Strichcode erkannt: ' + r.raw.slice(0, 60);
     return;
   }
+  const fill = data => {
+    for (const [k, v] of Object.entries(data)) {
+      const el = F[k];
+      if (!el || v == null || v === '') continue;
+      if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
+    }
+  };
   if (r.gtin) {
     F.gtin.value = r.gtin;
     const known = store.catalogLookup(r.gtin);
-    if (known) {
-      for (const [k, v] of Object.entries(known)) {
-        const el = form.elements[k];
-        if (!el || v == null || v === '') continue;
-        if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
-      }
-      info.push('Produkt bekannt, Angaben übernommen');
-    }
     const sm = swissmedicInfo(r.gtin);
-    if (sm) info.push(`Swissmedic-Zulassung ${sm.authNo}`);
+    if (known) {
+      fill(known);
+      info.push('Produkt bekannt, Angaben übernommen');
+    } else if (sm) {
+      $('#scanInfo').hidden = false;
+      $('#scanInfo').textContent = 'Suche in der Swissmedic-Liste …';
+      const drug = await lookupSwissDrug(r.gtin);
+      if (drug) {
+        fill(drug);
+        info.push('Gefunden in der Swissmedic-Liste');
+      } else {
+        info.push(`Swissmedic-Nr. ${sm.authNo}, nicht in der Liste gefunden: Name bitte eintippen`);
+      }
+    } else {
+      info.push('Unbekanntes Produkt: Name bitte eintippen (wird für den nächsten Scan gemerkt)');
+    }
   }
   if (r.pzn) info.push(`PZN ${r.pzn}`);
   if (r.expiry) { F.expiry.value = r.expiry; info.push(`Ablauf ${fmtDate(r.expiry)}`); }
@@ -290,7 +305,7 @@ function applyScan(raw) {
   if (r.batch) { F.batch.value = r.batch; info.push(`Charge ${r.batch}`); }
   if (r.count && !F.quantity.value) F.quantity.value = r.count;
 
-  if (r.type === 'gtin' && !r.expiry) info.push('Nur EAN-Strichcode: Ablaufdatum bitte von der Packung abtippen, oder den quadratischen DataMatrix-Code scannen');
+  if (r.type === 'gtin' && !r.expiry) info.push('Ablaufdatum bitte von der Packung abtippen (steht nicht im Strichcode)');
   $('#scanInfo').hidden = false;
   $('#scanInfo').textContent = '✓ ' + info.join(' · ');
   updateFormHint(); updateRxWarn();
