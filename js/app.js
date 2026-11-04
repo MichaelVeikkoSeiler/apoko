@@ -13,7 +13,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtDate = iso => iso ? new Date(iso + (iso.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('de-CH') : '–';
-// Ablauf- und Herstelldatum: nur Monat/Jahr. Intern gilt der Monatsletzte (JJJJ-MM-TT).
+// Ablaufdatum: nur Monat/Jahr. Intern gilt der Monatsletzte (JJJJ-MM-TT).
 const fmtMonth = iso => iso ? `${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '–';
 const monthEnd = (y, m) => `${y}-${String(m).padStart(2, '0')}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
 /** Setzt ein Monatsfeld (type=month, ältere Browser: Textfeld MM/JJJJ). */
@@ -276,7 +276,7 @@ function openItem(item) {
     if (!el.name) continue;
     const v = item[el.name];
     if (el.type === 'checkbox') el.checked = !!v;
-    else if (el.name === 'expiry' || el.name === 'prodDate') setMonth(el, v);
+    else if (el.name === 'expiry') setMonth(el, v);
     else el.value = v ?? '';
   }
   delete F.imageUrl.dataset.source;
@@ -303,7 +303,6 @@ function readForm() {
     remaining: num(F.remaining.value),
     unit: F.unit.value,
     expiry: readMonth(F.expiry),
-    prodDate: readMonth(F.prodDate),
     rx: F.rx.checked,
     category: F.category.value,
     shared: F.shared.checked,
@@ -321,8 +320,6 @@ form.addEventListener('submit', async e => {
   const item = readForm();
   const isNew = !item.id;
   item.id ||= store.uid();
-  if (item.prodDate && item.expiry && item.prodDate > item.expiry)
-    return toast('Das Herstelldatum liegt nach dem Ablaufdatum.');
   if (item.remaining != null && item.quantity != null && item.remaining > item.quantity)
     return toast('„Noch vorhanden“ ist grösser als die Packungsgrösse.');
   if (item.rx && item.shared && !confirm(NOTES.rxShare + '\n\nTrotzdem teilen?')) return;
@@ -402,7 +399,6 @@ async function applyScan(raw) {
   }
   if (r.pzn) info.push(`PZN ${r.pzn}`);
   if (r.expiry) { setMonth(F.expiry, r.expiry); info.push(`Ablauf ${fmtMonth(r.expiry)}`); }
-  if (r.prodDate) { setMonth(F.prodDate, r.prodDate); info.push(`hergestellt ${fmtMonth(r.prodDate)}`); }
   if (r.batch) { F.batch.value = r.batch; info.push(`Charge ${r.batch}`); }
   if (r.count && !F.quantity.value) F.quantity.value = r.count;
 
@@ -465,7 +461,7 @@ $('#expiryInput').addEventListener('change', async e => {
       info.textContent = 'Kein Datum gefunden. Tipp: „Ablaufdatum scannen“ verwenden und das Datum in den Rahmen halten, oder Monat/Jahr eingeben. Eingeprägte Daten (ohne Farbe) sind kaum lesbar.';
       return;
     }
-    setExpiryFromScan({ expiry: found.expiry, prodDate: found.prodDate }, 'Foto');
+    setExpiryFromScan({ expiry: found.expiry }, 'Foto');
   } catch (err) {
     info.className = 'warn';
     info.textContent = 'Lesen fehlgeschlagen: ' + err.message;
@@ -628,7 +624,7 @@ async function openDateScanner() {
     if (!alive) return;
     if (found.expiry && found.expiry === last) {
       closeScanner();
-      setExpiryFromScan({ expiry: found.expiry, prodDate: found.prodDate }, 'Kamera');
+      setExpiryFromScan({ expiry: found.expiry }, 'Kamera');
       return;
     }
     if (found.expiry) status.textContent = `Gelesen: ${fmtMonth(found.expiry)}. Bitte kurz ruhig halten …`;
@@ -644,7 +640,6 @@ function setExpiryFromScan(found, via) {
   info.className = 'scaninfo';
   setMonth(F.expiry, found.expiry);
   const parts = [`Ablauf ${fmtMonth(found.expiry)}`];
-  if (found.prodDate && !F.prodDate.value) { setMonth(F.prodDate, found.prodDate); parts.push(`hergestellt ${fmtMonth(found.prodDate)}`); }
   if (found.batch && !F.batch.value) { F.batch.value = found.batch; parts.push(`Charge ${found.batch}`); }
   $('#btnExpiryPhoto').classList.remove('attention');
   info.textContent = `✓ ${parts.join(' · ')} (${via}). Bitte kurz mit der Packung vergleichen.`;
