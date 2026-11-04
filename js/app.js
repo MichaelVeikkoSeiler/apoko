@@ -1,0 +1,474 @@
+import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
+import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, formById } from './knowledge.js';
+import * as store from './store.js';
+import { startScanner } from './scanner.js';
+import { buildShareCode, shareLink, parseShareCode, sharedItems } from './share.js';
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = iso => iso ? new Date(iso + (iso.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('de-CH') : '–';
+const fmtNum = n => (n === '' || n == null || isNaN(n)) ? '' : Number(n).toLocaleString('de-CH');
+
+let filter = 'all';
+let query = '';
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ---------- Navigation ----------
+function showView(name) {
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === name));
+  $('#fab').hidden = name !== 'inventory';
+  if (name === 'linked') renderLinked();
+  if (name === 'check') renderChecklist();
+  window.scrollTo(0, 0);
+}
+$$('.tab').forEach(t => t.addEventListener('click', () => showView(t.dataset.view)));
+
+// ---------- Vorrat ----------
+function describeDays(days) {
+  if (days == null) return 'Kein Ablaufdatum';
+  if (days < 0) return `Abgelaufen seit ${-days} ${-days === 1 ? 'Tag' : 'Tagen'}`;
+  if (days === 0) return 'Läuft heute ab';
+  if (days < 60) return `Läuft ab in ${days} ${days === 1 ? 'Tag' : 'Tagen'}`;
+  const months = Math.round(days / 30.4);
+  return months < 24 ? `Haltbar noch ${months} Monate` : `Haltbar noch ${Math.round(days / 365)} Jahre`;
+}
+
+function matches(item, q) {
+  if (!q) return true;
+  const hay = [item.name, item.substance, item.strength, item.location, item.person, item.notes, formById(item.form).label]
+    .join(' ').toLowerCase();
+  return q.toLowerCase().split(/\s+/).every(w => hay.includes(w));
+}
+
+function passFilter(item, st) {
+  switch (filter) {
+    case 'soon': return st.status === 'soon';
+    case 'expired': return st.status === 'expired';
+    case 'rx': return !!item.rx;
+    case 'otc': return !item.rx;
+    case 'shared': return !!item.shared;
+    case 'private': return !item.shared;
+    default: return true;
+  }
+}
+
+function amountText(item) {
+  if (item.quantity == null && item.remaining == null) return '';
+  const unit = item.unit || '';
+  if (item.remaining != null && item.quantity != null && item.remaining !== item.quantity)
+    return `${fmtNum(item.remaining)} / ${fmtNum(item.quantity)} ${unit}`;
+  return `${fmtNum(item.remaining ?? item.quantity)} ${unit}`;
+}
+
+function itemCard(item, { readonly = false } = {}) {
+  const st = store.expiryStatus(item);
+  const form = formById(item.form);
+  const pct = item.quantity > 0 && item.remaining != null ? Math.max(0, Math.min(100, item.remaining / item.quantity * 100)) : null;
+  return `
+    <li class="item ${st.status}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
+      <div>
+        <h3>${esc(item.name)}${item.strength ? ` <span class="muted">${esc(item.strength)}</span>` : ''}</h3>
+        <div class="meta">${esc([item.substance, form.label].filter(Boolean).join(' · '))}</div>
+        ${!readonly && (item.location || item.person) ? `<div class="meta">${esc([item.location && '📍 ' + item.location, item.person && '👤 ' + item.person].filter(Boolean).join('   '))}</div>` : ''}
+      </div>
+      <div class="right">
+        <div>${esc(amountText(item))}</div>
+        ${pct != null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}
+        <div class="muted">${st.eff ? fmtDate(st.eff.date) : ''}</div>
+      </div>
+      <div class="badges">
+        <span class="badge ${st.status}">${describeDays(st.days)}${st.eff?.reason === 'nach Anbruch' ? ' (Anbruch)' : ''}</span>
+        ${item.rx ? `<span class="badge rx">℞ Rezeptpflichtig${item.category ? ' · ' + esc(item.category) : ''}</span>` : ''}
+        ${!readonly && item.shared ? '<span class="badge shared">🔗 Geteilt</span>' : ''}
+      </div>
+    </li>`;
+}
+
+function renderInventory() {
+  const { items, household } = store.getState();
+  $('#householdLabel').textContent = household.name;
+
+  const withStatus = items.map(i => ({ i, st: store.expiryStatus(i) }));
+  const counts = {
+    all: items.length,
+    expired: withStatus.filter(x => x.st.status === 'expired').length,
+    soon: withStatus.filter(x => x.st.status === 'soon').length,
+    rx: items.filter(i => i.rx).length,
+  };
+  $('#stats').innerHTML = `
+    <button class="stat" data-filter="all"><b>${counts.all}</b><span>Artikel</span></button>
+    <button class="stat soon" data-filter="soon"><b>${counts.soon}</b><span>bald ablaufend</span></button>
+    <button class="stat expired" data-filter="expired"><b>${counts.expired}</b><span>abgelaufen</span></button>
+    <button class="stat rx" data-filter="rx"><b>${counts.rx}</b><span>rezeptpflichtig</span></button>`;
+
+  $('#alerts').innerHTML = counts.expired
+    ? `<div class="alert danger"><strong>${counts.expired} Artikel abgelaufen.</strong> ${esc(NOTES.disposal)}</div>` : '';
+
+  const order = { expired: 0, soon: 1, ok: 2, unknown: 3 };
+  const list = withStatus
+    .filter(x => passFilter(x.i, x.st) && matches(x.i, query))
+    .sort((a, b) => order[a.st.status] - order[b.st.status] || (a.st.days ?? 1e9) - (b.st.days ?? 1e9) || a.i.name.localeCompare(b.i.name));
+
+  $('#itemList').innerHTML = list.map(x => itemCard(x.i)).join('') ||
+    (items.length ? '<p class="muted" style="text-align:center">Keine Treffer für diesen Filter.</p>' : '');
+  $('#emptyState').hidden = items.length > 0;
+  $$('#filters .chip').forEach(c => c.classList.toggle('active', c.dataset.filter === filter));
+}
+
+function setFilter(f) { filter = f; renderInventory(); }
+$('#filters').addEventListener('click', e => { const b = e.target.closest('[data-filter]'); if (b) setFilter(b.dataset.filter); });
+$('#stats').addEventListener('click', e => { const b = e.target.closest('[data-filter]'); if (b) setFilter(b.dataset.filter); });
+$('#search').addEventListener('input', e => { query = e.target.value.trim(); renderInventory(); });
+$('#itemList').addEventListener('click', e => {
+  const li = e.target.closest('.item[data-id]');
+  if (li) openItem(store.getState().items.find(i => i.id === li.dataset.id));
+});
+$('#itemList').addEventListener('keydown', e => {
+  if (e.key === 'Enter') e.target.closest('.item[data-id]')?.click();
+});
+
+// ---------- Erfassen / Bearbeiten ----------
+const dlg = $('#itemDialog');
+const form = $('#itemForm');
+const F = form.elements;
+
+$('#formSelect').innerHTML = FORMS.map(f => `<option value="${f.id}">${esc(f.label)}</option>`).join('');
+$('#unitSelect').innerHTML = UNITS.map(u => `<option>${u}</option>`).join('');
+$('#categorySelect').innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${esc(c.label)}</option>`).join('');
+
+function fillDatalists() {
+  const { items } = store.getState();
+  const uniq = key => [...new Set(items.map(i => i[key]).filter(Boolean))].sort();
+  $('#locations').innerHTML = uniq('location').map(v => `<option value="${esc(v)}">`).join('');
+  $('#persons').innerHTML = uniq('person').map(v => `<option value="${esc(v)}">`).join('');
+}
+
+function updateFormHint() {
+  const f = formById(F.form.value);
+  $('#formHint').hidden = !f.hint;
+  $('#formHint').textContent = f.hint || '';
+}
+
+function updateRxWarn() {
+  const show = F.rx.checked && F.shared.checked;
+  $('#rxShareWarn').hidden = !show;
+  $('#rxShareWarn').textContent = '⚠️ ' + NOTES.rxShare;
+}
+
+F.form.addEventListener('change', () => {
+  const f = formById(F.form.value);
+  F.unit.value = f.unit;
+  if (f.openDays && !F.openDays.value) F.openDays.value = f.openDays;
+  updateFormHint();
+});
+F.category.addEventListener('change', () => {
+  const c = CATEGORIES.find(c => c.id === F.category.value);
+  if (c && c.rx != null) F.rx.checked = c.rx;
+  updateRxWarn();
+});
+F.rx.addEventListener('change', () => {
+  const cat = CATEGORIES.find(c => c.id === F.category.value);
+  if (cat?.rx != null && cat.rx !== F.rx.checked) F.category.value = '';
+  updateRxWarn();
+});
+F.shared.addEventListener('change', updateRxWarn);
+F.openedAt.addEventListener('change', () => {
+  if (F.openedAt.value && !F.openDays.value) {
+    const f = formById(F.form.value);
+    if (f.openDays) F.openDays.value = f.openDays;
+  }
+});
+$('#btnMonthEnd').addEventListener('click', () => {
+  const v = F.expiry.value;
+  if (!v) return toast('Zuerst ein Ablaufdatum wählen.');
+  const [y, m] = v.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  F.expiry.value = `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+});
+
+function openItem(item) {
+  form.reset();
+  $('#scanInfo').hidden = true;
+  const isNew = !item;
+  item ||= { form: 'tablette', unit: 'Stk', shared: false, rx: false };
+  $('#itemDialogTitle').textContent = isNew ? 'Artikel erfassen' : 'Artikel bearbeiten';
+  $('#btnDelete').hidden = isNew;
+  for (const el of form.elements) {
+    if (!el.name) continue;
+    const v = item[el.name];
+    if (el.type === 'checkbox') el.checked = !!v;
+    else el.value = v ?? '';
+  }
+  fillDatalists();
+  updateFormHint();
+  updateRxWarn();
+  dlg.showModal();
+  if (isNew) $('#btnScan').focus();
+}
+
+function readForm() {
+  const num = v => v === '' ? null : Number(v);
+  return {
+    id: F.id.value || undefined,
+    name: F.name.value.trim(),
+    substance: F.substance.value.trim(),
+    strength: F.strength.value.trim(),
+    form: F.form.value,
+    quantity: num(F.quantity.value),
+    remaining: num(F.remaining.value),
+    unit: F.unit.value,
+    expiry: F.expiry.value || null,
+    prodDate: F.prodDate.value || null,
+    openedAt: F.openedAt.value || null,
+    openDays: num(F.openDays.value),
+    rx: F.rx.checked,
+    category: F.category.value,
+    shared: F.shared.checked,
+    location: F.location.value.trim(),
+    person: F.person.value.trim(),
+    batch: F.batch.value.trim(),
+    gtin: F.gtin.value.replace(/\D/g, '') ? normalizeGtin(F.gtin.value) : '',
+    notes: F.notes.value.trim(),
+  };
+}
+
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  const item = readForm();
+  if (item.prodDate && item.expiry && item.prodDate > item.expiry)
+    return toast('Das Herstelldatum liegt nach dem Ablaufdatum.');
+  if (item.remaining != null && item.quantity != null && item.remaining > item.quantity)
+    return toast('„Noch vorhanden“ ist grösser als die Packungsgrösse.');
+  if (item.rx && item.shared && !confirm(NOTES.rxShare + '\n\nTrotzdem teilen?')) return;
+  store.upsertItem(item);
+  dlg.close();
+  toast(item.id ? 'Gespeichert' : 'Erfasst');
+});
+$('[data-close]', dlg).addEventListener('click', () => dlg.close());
+$('#btnDelete').addEventListener('click', () => {
+  if (!confirm(`„${F.name.value}“ löschen?`)) return;
+  store.deleteItem(F.id.value);
+  dlg.close();
+  toast('Gelöscht');
+});
+$('#fab').addEventListener('click', () => openItem(null));
+
+function applyScan(raw) {
+  const r = parseBarcode(raw);
+  const info = [];
+  if (r.type === 'text' || r.type === 'unknown') {
+    $('#scanInfo').hidden = false;
+    $('#scanInfo').textContent = 'Code gelesen, aber kein Produkt-Strichcode erkannt: ' + r.raw.slice(0, 60);
+    return;
+  }
+  if (r.gtin) {
+    F.gtin.value = r.gtin;
+    const known = store.catalogLookup(r.gtin);
+    if (known) {
+      for (const [k, v] of Object.entries(known)) {
+        const el = form.elements[k];
+        if (!el || v == null || v === '') continue;
+        if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
+      }
+      info.push('Produkt bekannt, Angaben übernommen');
+    }
+    const sm = swissmedicInfo(r.gtin);
+    if (sm) info.push(`Swissmedic-Zulassung ${sm.authNo}`);
+  }
+  if (r.pzn) info.push(`PZN ${r.pzn}`);
+  if (r.expiry) { F.expiry.value = r.expiry; info.push(`Ablauf ${fmtDate(r.expiry)}`); }
+  if (r.prodDate) { F.prodDate.value = r.prodDate; info.push(`hergestellt ${fmtDate(r.prodDate)}`); }
+  if (r.batch) { F.batch.value = r.batch; info.push(`Charge ${r.batch}`); }
+  if (r.count && !F.quantity.value) F.quantity.value = r.count;
+
+  if (r.type === 'gtin' && !r.expiry) info.push('Nur EAN-Strichcode: Ablaufdatum bitte von der Packung abtippen, oder den quadratischen DataMatrix-Code scannen');
+  $('#scanInfo').hidden = false;
+  $('#scanInfo').textContent = '✓ ' + info.join(' · ');
+  updateFormHint(); updateRxWarn();
+  if (!F.name.value) F.name.focus();
+}
+
+// ---------- Scanner ----------
+const scanDlg = $('#scanDialog');
+let stopScan = null;
+let scanHandler = null;
+
+async function openScanner(handler, hint) {
+  scanHandler = handler;
+  $('#manualCode').value = '';
+  $('#scanStatus').textContent = 'Kamera wird gestartet …';
+  scanDlg.showModal();
+  try {
+    stopScan = await startScanner($('#scanVideo'), text => { closeScanner(); handler(text); });
+    $('#scanStatus').textContent = hint;
+  } catch (e) {
+    $('#scanStatus').textContent = (e.name === 'NotAllowedError' ? 'Kein Kamerazugriff erlaubt.' : e.message) + ' Du kannst den Code unten eintippen.';
+  }
+}
+function closeScanner() {
+  stopScan?.(); stopScan = null;
+  if (scanDlg.open) scanDlg.close();
+}
+scanDlg.addEventListener('close', () => { stopScan?.(); stopScan = null; });
+$('#btnScanClose').addEventListener('click', closeScanner);
+$('#btnManual').addEventListener('click', () => {
+  const v = $('#manualCode').value.trim();
+  if (!v) return;
+  closeScanner();
+  scanHandler?.(v);
+});
+$('#manualCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnManual').click(); });
+$('#btnScan').addEventListener('click', () =>
+  openScanner(applyScan, 'Am besten den quadratischen DataMatrix-Code scannen, er enthält auch das Ablaufdatum.'));
+
+// ---------- Verbunden ----------
+let lastShareCode = '';
+
+function renderLinked() {
+  const n = sharedItems().length;
+  $('#shareCount').innerHTML = n
+    ? `<b>${n}</b> Artikel werden geteilt.`
+    : 'Momentan teilst du keine Artikel. Aktiviere „Teilen“ beim jeweiligen Artikel.';
+
+  const q = $('#linkedSearch').value.trim();
+  const { linked } = store.getState();
+  if (!linked.length) {
+    $('#linkedList').innerHTML = '<p class="muted" style="text-align:center">Noch keine Haushalte verbunden.</p>';
+    return;
+  }
+  $('#linkedList').innerHTML = linked.map(h => {
+    const items = h.items.filter(i => matches(i, q))
+      .sort((a, b) => (a.expiry || '').localeCompare(b.expiry || ''));
+    if (q && !items.length) return '';
+    return `
+      <div class="card household">
+        <div class="household-head">
+          <div>
+            <h2>🏠 ${esc(h.name)}</h2>
+            <p class="muted small">${h.items.length} geteilte Artikel · Stand ${fmtDate(h.sharedAt?.slice(0, 10))}</p>
+          </div>
+          <button class="btn ghost small" data-remove="${esc(h.id)}">Entfernen</button>
+        </div>
+        <ul class="list">${items.map(i => itemCard(i, { readonly: true })).join('') || '<p class="muted small">Keine Artikel.</p>'}</ul>
+      </div>`;
+  }).join('') || '<p class="muted" style="text-align:center">Kein verbundener Haushalt hat das.</p>';
+}
+
+$('#linkedSearch').addEventListener('input', renderLinked);
+$('#linkedList').addEventListener('click', e => {
+  const id = e.target.closest('[data-remove]')?.dataset.remove;
+  if (id && confirm('Diesen Haushalt entfernen?')) { store.removeLinked(id); renderLinked(); }
+});
+
+$('#btnShare').addEventListener('click', async () => {
+  if (!sharedItems().length && !confirm('Du teilst aktuell keine Artikel. Trotzdem einen (leeren) Code erstellen, damit der andere Haushalt dich sieht?')) return;
+  lastShareCode = await buildShareCode();
+  const link = shareLink(lastShareCode);
+  const box = $('#qr');
+  box.innerHTML = '';
+  try {
+    const qr = qrcode(0, 'L');
+    qr.addData(link);
+    qr.make();
+    box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  } catch {
+    box.innerHTML = '<p class="muted small" style="color:#333">Zu viele Artikel für einen QR-Code. Bitte den Link senden.</p>';
+  }
+  $('#sharePanel').hidden = false;
+  $('#btnShareNative').hidden = !navigator.share;
+});
+$('#btnCopy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(shareLink(lastShareCode)); toast('Link kopiert'); }
+  catch { prompt('Link kopieren:', shareLink(lastShareCode)); }
+});
+$('#btnShareNative').addEventListener('click', () => {
+  navigator.share({ title: 'Apoko: ' + store.getState().household.name, text: 'Verbinde dich mit meiner Hausapotheke:', url: shareLink(lastShareCode) }).catch(() => {});
+});
+
+async function join(input) {
+  try {
+    const snap = await parseShareCode(input);
+    const exists = store.getState().linked.some(h => h.id === snap.id);
+    if (!confirm(`${exists ? 'Aktualisieren' : 'Verbinden'}: „${snap.name}“ mit ${snap.items.length} geteilten Artikeln?`)) return;
+    const res = store.upsertLinked(snap);
+    toast(res === 'updated' ? `„${snap.name}“ aktualisiert` : `„${snap.name}“ verbunden`);
+    $('#joinCode').value = '';
+    showView('linked');
+  } catch (e) { alert(e.message); }
+}
+$('#btnJoin').addEventListener('click', () => join($('#joinCode').value));
+$('#btnJoinScan').addEventListener('click', () => openScanner(join, 'QR-Code des anderen Haushalts in den Rahmen halten.'));
+
+function handleHash() {
+  const m = /#join=([A-Za-z0-9_-]+)/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  join(m[1]);
+}
+window.addEventListener('hashchange', handleHash);
+
+// ---------- Checkliste ----------
+function renderChecklist() {
+  const items = store.getState().items.filter(i => store.expiryStatus(i).status !== 'expired');
+  $('#checklist').innerHTML = CHECKLIST.map(c => {
+    const hits = items.filter(i => {
+      const hay = [i.name, i.substance].join(' ').toLowerCase();
+      return c.keys.some(k => hay.includes(k)) || (c.forms || []).includes(i.form);
+    });
+    return `<li><span class="mark">${hits.length ? '✅' : '⬜️'}</span>
+      <div><div>${esc(c.label)}</div>${hits.length ? `<div class="have">${esc(hits.map(h => h.name).join(', '))}</div>` : ''}</div></li>`;
+  }).join('');
+  $('#tips').innerHTML = `<h2>Gut zu wissen</h2>
+    <p class="small">🗓️ ${esc(NOTES.expiry)}</p>
+    <p class="small">🌡️ ${esc(NOTES.storage)}</p>
+    <p class="small">♻️ ${esc(NOTES.disposal)}</p>
+    <p class="small">℞ ${esc(NOTES.rxShare)}</p>`;
+}
+
+// ---------- Einstellungen ----------
+$('#householdName').value = store.getState().household.name;
+$('#householdName').addEventListener('change', e => { store.setHouseholdName(e.target.value); toast('Name gespeichert'); });
+$('#btnExport').addEventListener('click', () => {
+  const blob = new Blob([store.exportBackup()], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `apoko-sicherung-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$('#fileImport').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    if (!confirm('Aktuelle Daten durch die Sicherung ersetzen?')) return;
+    store.importBackup(text);
+    $('#householdName').value = store.getState().household.name;
+    toast('Sicherung wiederhergestellt');
+  } catch (err) { alert(err.message); }
+  finally { e.target.value = ''; }
+});
+$('#btnReset').addEventListener('click', () => {
+  if (!confirm('Wirklich ALLE Daten auf diesem Gerät löschen?')) return;
+  store.resetAll();
+  $('#householdName').value = store.getState().household.name;
+  toast('Alle Daten gelöscht');
+});
+
+// ---------- Start ----------
+store.onChange(() => { renderInventory(); if ($('#view-linked').classList.contains('active')) renderLinked(); });
+renderInventory();
+handleHash();
+
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
