@@ -30,6 +30,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -236,3 +237,5 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .photo-actions p { margin: 0; }
 #btnExpiryPhoto { margin: 4px 0 6px; }
 #btnExpiryPhoto.attention { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+/* Datumskamera: breiter, flacher Rahmen */
+.scanner.date-mode .scan-frame { width: min(88vw, 460px); aspect-ratio: 2.8; top: 40%; border-color: #ffd166; }
