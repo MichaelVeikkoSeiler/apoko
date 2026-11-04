@@ -155,15 +155,17 @@
             <span id="photoEmpty">📷</span>
           </div>
           <div class="photo-actions">
-            <label class="btn">Foto aufnehmen
+            <p id="photoSource" class="muted small">Produktbild: wird automatisch geladen, wenn ein offizielles freies Foto existiert.</p>
+            <label class="btn small-btn">Eigenes Foto (optional)
               <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
             </label>
-            <button type="button" id="btnPhotoRemove" class="btn ghost" hidden>Foto entfernen</button>
+            <button type="button" id="btnPhotoRemove" class="btn ghost small-btn" hidden>Bild entfernen</button>
           </div>
         </div>
         <input id="recognizeInput" type="file" accept="image/*" capture="environment" hidden>
 
         <input type="hidden" name="id">
+        <input type="hidden" name="imageUrl">
         <label>Name *
           <input name="name" required placeholder="z. B. Dafalgan 500 mg" autocomplete="off">
         </label>
@@ -200,6 +202,9 @@
             <input name="prodDate" type="date">
           </label>
         </div>
+        <button type="button" id="btnExpiryPhoto" class="btn wide">📷 Ablaufdatum fotografieren</button>
+        <input id="expiryInput" type="file" accept="image/*" capture="environment" hidden>
+        <p id="expiryInfo" class="scaninfo" hidden></p>
         <p class="hint small">Steht nur Monat/Jahr auf der Packung (z. B. 12/2027), gilt der letzte Tag des Monats.
           <button type="button" class="linkbtn" id="btnMonthEnd">Auf Monatsende setzen</button></p>
 
