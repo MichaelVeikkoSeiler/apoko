@@ -135,11 +135,11 @@
 
   <!-- Erfassen / Bearbeiten -->
   <dialog id="itemDialog" class="sheet">
-    <form id="itemForm" method="dialog">
+    <form id="itemForm" method="dialog" novalidate>
       <header class="sheet-head">
         <button type="button" class="btn ghost" data-close>Abbrechen</button>
         <h2 id="itemDialogTitle">Artikel erfassen</h2>
-        <button type="submit" class="btn primary">Speichern</button>
+        <span class="head-spacer"></span>
       </header>
       <div class="sheet-body">
         <div class="scanrow">
@@ -228,20 +228,18 @@
             <datalist id="persons"></datalist>
           </label>
         </div>
-        <div class="grid2">
-          <label>Charge / Lot
-            <input name="batch" autocomplete="off">
-          </label>
-          <label>GTIN / Strichcode
-            <input name="gtin" inputmode="numeric" autocomplete="off">
-          </label>
-        </div>
+        <!-- intern: Strichcode (Wiedererkennung beim nächsten Scan) und Charge (aus DataMatrix) -->
+        <input type="hidden" name="gtin">
+        <input type="hidden" name="batch">
         <label>Notizen (privat)
           <textarea name="notes" rows="2" placeholder="z. B. Dosierung laut Ärztin"></textarea>
         </label>
 
         <button type="button" id="btnDelete" class="btn danger wide" hidden>Artikel löschen</button>
       </div>
+      <footer class="sheet-foot">
+        <button type="submit" class="btn primary wide">Speichern</button>
+      </footer>
     </form>
   </dialog>
 

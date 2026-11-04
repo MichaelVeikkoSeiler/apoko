@@ -37,6 +37,9 @@ let query = '';
 
 function toast(msg) {
   const t = $('#toast');
+  // Offene Dialoge liegen über allem: Meldung dort hineinhängen, sonst ist sie unsichtbar
+  const host = [...document.querySelectorAll('dialog[open]')].pop() || document.body;
+  if (t.parentElement !== host) host.appendChild(t);
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toast.t);
@@ -263,6 +266,7 @@ $('#btnPhotoRemove').addEventListener('click', () => {
 
 function openItem(item) {
   form.reset();
+  $$('.field-invalid', form).forEach(el => el.classList.remove('field-invalid'));
   $('#scanInfo').hidden = true;
   $('#suggestions').hidden = true;
   pendingPhoto = undefined;
@@ -315,8 +319,20 @@ function readForm() {
   };
 }
 
+/** Fehlendes Pflichtfeld deutlich zeigen (die Browser-Blase liegt sonst oft ausserhalb des Bildschirms). */
+function flagField(el, msg) {
+  el.classList.add('field-invalid');
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (el.type !== 'month') el.focus({ preventScroll: true });
+  toast(msg);
+  el.addEventListener('input', () => el.classList.remove('field-invalid'), { once: true });
+  el.addEventListener('change', () => el.classList.remove('field-invalid'), { once: true });
+}
+
 form.addEventListener('submit', async e => {
   e.preventDefault();
+  if (!F.name.value.trim()) return flagField(F.name, 'Bitte einen Namen eingeben.');
+  if (!readMonth(F.expiry)) return flagField(F.expiry, 'Bitte das Ablaufdatum (Monat/Jahr) wählen.');
   const item = readForm();
   const isNew = !item.id;
   item.id ||= store.uid();
@@ -399,7 +415,7 @@ async function applyScan(raw) {
   }
   if (r.pzn) info.push(`PZN ${r.pzn}`);
   if (r.expiry) { setMonth(F.expiry, r.expiry); info.push(`Ablauf ${fmtMonth(r.expiry)}`); }
-  if (r.batch) { F.batch.value = r.batch; info.push(`Charge ${r.batch}`); }
+  if (r.batch) F.batch.value = r.batch;
   if (r.count && !F.quantity.value) F.quantity.value = r.count;
 
   if (!r.expiry && !F.expiry.value) {
@@ -640,7 +656,6 @@ function setExpiryFromScan(found, via) {
   info.className = 'scaninfo';
   setMonth(F.expiry, found.expiry);
   const parts = [`Ablauf ${fmtMonth(found.expiry)}`];
-  if (found.batch && !F.batch.value) { F.batch.value = found.batch; parts.push(`Charge ${found.batch}`); }
   $('#btnExpiryPhoto').classList.remove('attention');
   info.textContent = `✓ ${parts.join(' · ')} (${via}). Bitte kurz mit der Packung vergleichen.`;
 }
