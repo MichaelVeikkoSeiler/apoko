@@ -107,10 +107,10 @@ function itemCard(item, { readonly = false } = {}) {
       <div class="right">
         <div>${esc(amountText(item))}</div>
         ${pct != null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}
-        <div class="muted">${!st.eff ? '' : st.eff.reason === 'nach Anbruch' ? fmtDate(st.eff.date) : fmtMonth(st.eff.date)}</div>
+        <div class="muted">${st.eff ? fmtMonth(st.eff.date) : ''}</div>
       </div>
       <div class="badges">
-        <span class="badge ${st.status}">${describeDays(st.days)}${st.eff?.reason === 'nach Anbruch' ? ' (Anbruch)' : ''}</span>
+        <span class="badge ${st.status}">${describeDays(st.days)}</span>
         ${item.rx ? `<span class="badge rx">℞ Rezeptpflichtig${item.category ? ' · ' + esc(item.category) : ''}</span>` : ''}
         ${!readonly && item.shared ? '<span class="badge shared">🔗 Geteilt</span>' : ''}
       </div>
@@ -195,7 +195,6 @@ function updateRxWarn() {
 F.form.addEventListener('change', () => {
   const f = formById(F.form.value);
   F.unit.value = f.unit;
-  if (f.openDays && !F.openDays.value) F.openDays.value = f.openDays;
   updateFormHint();
 });
 F.category.addEventListener('change', () => {
@@ -223,12 +222,6 @@ function autoFormFromName() {
   }
 }
 F.name.addEventListener('change', autoFormFromName);
-F.openedAt.addEventListener('change', () => {
-  if (F.openedAt.value && !F.openDays.value) {
-    const f = formById(F.form.value);
-    if (f.openDays) F.openDays.value = f.openDays;
-  }
-});
 
 // undefined = unverändert, null = entfernen, Blob = neues Foto
 let pendingPhoto;
@@ -311,8 +304,6 @@ function readForm() {
     unit: F.unit.value,
     expiry: readMonth(F.expiry),
     prodDate: readMonth(F.prodDate),
-    openedAt: F.openedAt.value || null,
-    openDays: num(F.openDays.value),
     rx: F.rx.checked,
     category: F.category.value,
     shared: F.shared.checked,

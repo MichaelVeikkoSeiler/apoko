@@ -55,7 +55,7 @@ export function upsertItem(item) {
     state.catalog[normalizeGtin(item.gtin)] = {
       name: item.name, substance: item.substance, strength: item.strength,
       form: item.form, quantity: item.quantity, unit: item.unit,
-      rx: item.rx, category: item.category, openDays: item.openDays, imageUrl: item.imageUrl,
+      rx: item.rx, category: item.category, imageUrl: item.imageUrl,
     };
   }
   save();
@@ -106,17 +106,9 @@ export function resetAll() {
 const DAY = 86400000;
 const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
 
-/** Effektives Ablaufdatum: frühere von Verfalldatum und Anbruch + Haltbarkeit. */
+/** Massgebend ist allein das Verfalldatum auf der Packung. */
 export function effectiveExpiry(item) {
-  const dates = [];
-  if (item.expiry) dates.push({ date: item.expiry, reason: 'Verfalldatum' });
-  if (item.openedAt && item.openDays) {
-    const d = new Date(item.openedAt);
-    d.setDate(d.getDate() + Number(item.openDays));
-    dates.push({ date: d.toISOString().slice(0, 10), reason: 'nach Anbruch' });
-  }
-  if (!dates.length) return null;
-  return dates.sort((a, b) => a.date.localeCompare(b.date))[0];
+  return item.expiry ? { date: item.expiry, reason: 'Verfalldatum' } : null;
 }
 
 /** 'expired' | 'soon' | 'ok' | 'unknown' und Resttage. */
