@@ -54,6 +54,21 @@ function extractStrength(name) {
 
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
+function rowToFields(row, { withQuantity = true } = {}) {
+  const [name, substance, size, unit, category] = row;
+  const qty = typeof size === 'number' ? size : parseFloat(String(size).replace(',', '.'));
+  return {
+    name,
+    substance: cap(substance),
+    strength: extractStrength(name),
+    form: guessForm(`${name} ${unit}`),
+    quantity: withQuantity && Number.isFinite(qty) ? qty : null,
+    unit: mapUnit(unit),
+    category: ['A', 'B', 'D', 'E'].includes(category) ? category : '',
+    rx: category === 'A' || category === 'B' ? true : category ? false : null,
+  };
+}
+
 /**
  * Liefert Formularwerte für eine GTIN oder null.
  * { name, substance, strength, form, quantity, unit, category, rx }
@@ -63,17 +78,80 @@ export async function lookupSwissDrug(gtin) {
   if (!sm) return null;
   const db = await loadDb();
   const row = db?.[sm.authNo + sm.packCode];
-  if (!row) return null;
-  const [name, substance, size, unit, category] = row;
-  const qty = typeof size === 'number' ? size : parseFloat(String(size).replace(',', '.'));
-  return {
-    name,
-    substance: cap(substance),
-    strength: extractStrength(name),
-    form: guessForm(`${name} ${unit}`),
-    quantity: Number.isFinite(qty) ? qty : null,
-    unit: mapUnit(unit),
-    category: ['A', 'B', 'D', 'E'].includes(category) ? category : '',
-    rx: category === 'A' || category === 'B' ? true : category ? false : null,
-  };
+  return row ? rowToFields(row) : null;
+}
+
+// ---- Suche nach aufgedrucktem Text (Blister, Flasche, Tube) ----
+
+const normText = s => String(s || '').toLowerCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[®™©]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+// Wörter, die in vielen Namen vorkommen und allein nichts aussagen
+const STOP = new Set(['tabletten', 'filmtabletten', 'kapseln', 'sirup', 'tropfen', 'losung', 'creme', 'salbe', 'spray',
+  'mepha', 'sandoz', 'streuli', 'spirig', 'helvepharm', 'axapharm', 'teva', 'zentiva', 'mylan', 'viatris', 'retard',
+  'forte', 'mite', 'plus', 'junior', 'kinder', 'brausetabletten', 'injektionslosung', 'suspension', 'zum', 'einnehmen']);
+
+let products = null;
+async function productIndex() {
+  if (products) return products;
+  const db = await loadDb();
+  if (!db) return null;
+  const byName = new Map();
+  for (const row of Object.values(db)) {
+    if (!byName.has(row[0])) byName.set(row[0], row);
+  }
+  products = [...byName.values()].map(row => {
+    const words = normText(row[0]).split(' ');
+    return {
+      row,
+      brand: words[0],
+      words: words.filter(w => w.length >= 4 && !STOP.has(w) && !/^\d/.test(w)),
+      numbers: words.filter(w => /^\d/.test(w)),
+      substance: normText(row[1]).split(' ')[0] || '',
+    };
+  });
+  return products;
+}
+
+function lev1(a, b) {
+  // true, wenn a und b sich höchstens um einen Buchstaben unterscheiden (OCR-Fehler)
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, diff = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++diff > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return diff + (a.length - i) + (b.length - j) <= 1;
+}
+
+/**
+ * Sucht Medikamente anhand von erkanntem Text. Gibt bis zu `limit` Vorschläge
+ * mit Formularwerten zurück (ohne Packungsgrösse, die ist bei losen Blistern unbekannt).
+ */
+export async function searchByText(text, limit = 6) {
+  const idx = await productIndex();
+  if (!idx) return [];
+  const tokens = new Set(normText(text).split(' ').filter(t => t.length >= 3));
+  const long = [...tokens].filter(t => t.length >= 6);
+  const has = w => tokens.has(w) || (w.length >= 6 && long.some(t => lev1(t, w)));
+  // Wirkstoffe stehen in der Liste lateinisch (paracetamolum), aufgedruckt deutsch (Paracetamol)
+  const hasSubstance = sub => [...tokens].some(t => t.length >= 6 && t.length >= sub.length - 3 && sub.startsWith(t.slice(0, -1)));
+  const nums = new Set([...tokens].filter(t => /^\d/.test(t)).concat(
+    (String(text).match(/\d+(?:[.,]\d+)?/g) || []).map(n => n.replace(',', '.'))));
+
+  const scored = [];
+  for (const p of idx) {
+    let score = 0;
+    if (p.brand.length >= 4 && !STOP.has(p.brand) && has(p.brand)) score += 10;
+    else if (p.substance.length >= 5 && hasSubstance(p.substance)) score += 4;
+    else continue;
+    for (const w of p.words) if (w !== p.brand && has(w)) score += 2;
+    for (const n of p.numbers) if (nums.has(n) || nums.has(n.replace(',', '.'))) score += 3;
+    scored.push({ score, p });
+  }
+  scored.sort((a, b) => b.score - a.score || a.p.row[0].length - b.p.row[0].length);
+  return scored.slice(0, limit).map(({ p }) => rowToFields(p.row, { withQuantity: false }));
 }
