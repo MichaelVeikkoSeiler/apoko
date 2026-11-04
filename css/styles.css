@@ -279,3 +279,11 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .swipe-row.revealed .swipe-del { visibility: visible; }
 .swipe-del span { display: block; }
 @media (prefers-color-scheme: dark) { .swipe-del { color: #1a0a08; } }
+/* Kompakte Artikelkarte: Name eine Zeile, Status + Standort in einer Zeile */
+.list { gap: 6px; }
+.swipe-row > .item, .item { padding: 8px 10px; min-height: 0; }
+.item h3 { font-size: .98rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .main .badges { margin-top: 4px; flex-wrap: nowrap; align-items: center; overflow: hidden; gap: 6px; }
+.item .badge { flex: none; }
+.item .loc { color: var(--muted); font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.item .right { font-size: .85rem; }
