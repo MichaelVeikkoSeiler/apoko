@@ -2,7 +2,9 @@ import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
 import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, formById } from './knowledge.js';
 import * as store from './store.js';
 import { startScanner } from './scanner.js';
-import { lookupSwissDrug } from './drugdb.js';
+import { lookupSwissDrug, searchByText } from './drugdb.js';
+import * as photos from './photos.js';
+import { recognizeText } from './ocr.js';
 import { buildShareCode, shareLink, parseShareCode, sharedItems } from './share.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -75,9 +77,10 @@ function itemCard(item, { readonly = false } = {}) {
   const form = formById(item.form);
   const pct = item.quantity > 0 && item.remaining != null ? Math.max(0, Math.min(100, item.remaining / item.quantity * 100)) : null;
   return `
-    <li class="item ${st.status}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
+    <li class="item ${st.status}${!readonly && item.hasPhoto ? ' has-photo' : ''}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
+      ${!readonly && item.hasPhoto ? `<img class="thumb" data-photo="${esc(item.id)}" alt="">` : ''}
       <div>
-        <h3>${esc(item.name)}${item.strength ? ` <span class="muted">${esc(item.strength)}</span>` : ''}</h3>
+        <h3>${esc(item.name)}${item.strength && !item.name.toLowerCase().includes(item.strength.toLowerCase()) ?` <span class="muted">${esc(item.strength)}</span>` : ''}</h3>
         <div class="meta">${esc([item.substance, form.label].filter(Boolean).join(' · '))}</div>
         ${!readonly && (item.location || item.person) ? `<div class="meta">${esc([item.location && '📍 ' + item.location, item.person && '👤 ' + item.person].filter(Boolean).join('   '))}</div>` : ''}
       </div>
@@ -122,6 +125,10 @@ function renderInventory() {
   $('#itemList').innerHTML = list.map(x => itemCard(x.i)).join('') ||
     (items.length ? '<p class="muted" style="text-align:center">Keine Treffer für diesen Filter.</p>' : '');
   $('#emptyState').hidden = items.length > 0;
+  $$('#itemList img[data-photo]').forEach(async img => {
+    const url = await photos.photoUrl(img.dataset.photo);
+    if (url) img.src = url; else img.remove();
+  });
   $$('#filters .chip').forEach(c => c.classList.toggle('active', c.dataset.filter === filter));
 }
 
@@ -196,9 +203,37 @@ $('#btnMonthEnd').addEventListener('click', () => {
   F.expiry.value = `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
 });
 
+// undefined = unverändert, null = entfernen, Blob = neues Foto
+let pendingPhoto;
+
+function showPhoto(url) {
+  $('#photoImg').hidden = !url;
+  $('#photoEmpty').hidden = !!url;
+  if (url) $('#photoImg').src = url; else $('#photoImg').removeAttribute('src');
+  $('#btnPhotoRemove').hidden = !url;
+}
+
+function setPendingPhoto(blob) {
+  pendingPhoto = blob;
+  showPhoto(blob ? URL.createObjectURL(blob) : null);
+}
+
+$('#photoInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try { setPendingPhoto(await photos.resizeImage(file)); }
+  catch { toast('Foto konnte nicht gelesen werden.'); }
+});
+$('#btnPhotoRemove').addEventListener('click', () => setPendingPhoto(null));
+
 function openItem(item) {
   form.reset();
   $('#scanInfo').hidden = true;
+  $('#suggestions').hidden = true;
+  pendingPhoto = undefined;
+  showPhoto(null);
+  if (item?.hasPhoto) photos.photoUrl(item.id).then(url => { if (pendingPhoto === undefined) showPhoto(url); });
   const isNew = !item;
   item ||= { form: 'tablette', unit: 'Stk', shared: false, rx: false };
   $('#itemDialogTitle').textContent = isNew ? 'Artikel erfassen' : 'Artikel bearbeiten';
@@ -242,21 +277,31 @@ function readForm() {
   };
 }
 
-form.addEventListener('submit', e => {
+form.addEventListener('submit', async e => {
   e.preventDefault();
   const item = readForm();
+  const isNew = !item.id;
+  item.id ||= store.uid();
   if (item.prodDate && item.expiry && item.prodDate > item.expiry)
     return toast('Das Herstelldatum liegt nach dem Ablaufdatum.');
   if (item.remaining != null && item.quantity != null && item.remaining > item.quantity)
     return toast('„Noch vorhanden“ ist grösser als die Packungsgrösse.');
   if (item.rx && item.shared && !confirm(NOTES.rxShare + '\n\nTrotzdem teilen?')) return;
+  if (pendingPhoto instanceof Blob) {
+    try { await photos.savePhoto(item.id, pendingPhoto); item.hasPhoto = true; }
+    catch { toast('Foto konnte nicht gespeichert werden.'); }
+  } else if (pendingPhoto === null) {
+    await photos.deletePhoto(item.id);
+    item.hasPhoto = false;
+  }
   store.upsertItem(item);
   dlg.close();
-  toast(item.id ? 'Gespeichert' : 'Erfasst');
+  toast(isNew ? 'Erfasst' : 'Gespeichert');
 });
 $('[data-close]', dlg).addEventListener('click', () => dlg.close());
 $('#btnDelete').addEventListener('click', () => {
   if (!confirm(`„${F.name.value}“ löschen?`)) return;
+  photos.deletePhoto(F.id.value);
   store.deleteItem(F.id.value);
   dlg.close();
   toast('Gelöscht');
@@ -310,6 +355,66 @@ async function applyScan(raw) {
   $('#scanInfo').textContent = '✓ ' + info.join(' · ');
   updateFormHint(); updateRxWarn();
   if (!F.name.value) F.name.focus();
+}
+
+// ---------- Erkennen ohne Packung (Foto + Texterkennung) ----------
+$('#btnRecognize').addEventListener('click', () => $('#recognizeInput').click());
+
+$('#recognizeInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const info = $('#scanInfo');
+  $('#suggestions').hidden = true;
+  info.hidden = false;
+  info.textContent = 'Foto wird gelesen …';
+  try {
+    const big = await photos.resizeImage(file, 1800, 0.9);
+    // Das Foto gleich als Produktfoto übernehmen, wenn noch keines da ist
+    if (!$('#photoImg').getAttribute('src')) setPendingPhoto(await photos.resizeImage(file));
+    const text = await recognizeText(big, m => {
+      if (m.status === 'recognizing text') info.textContent = `Text wird erkannt … ${Math.round(m.progress * 100)} %`;
+      else if (/load|initializ/.test(m.status)) info.textContent = 'Texterkennung wird vorbereitet (nur beim ersten Mal) …';
+    });
+    info.textContent = 'Suche in der Swissmedic-Liste …';
+    renderSuggestions(await searchByText(text), text);
+  } catch (err) {
+    info.textContent = 'Erkennung fehlgeschlagen: ' + err.message;
+  }
+});
+
+const TABLET_NOTE = '<p>⚠️ Lose Tabletten ohne Aufdruck lassen sich nicht sicher erkennen. Nimm nichts ein, was du nicht eindeutig zuordnen kannst. Im Zweifel in der Apotheke nachfragen.</p>';
+
+function renderSuggestions(hits, text) {
+  const info = $('#scanInfo');
+  const box = $('#suggestions');
+  box.hidden = false;
+  if (!hits.length) {
+    const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 80);
+    info.textContent = snippet
+      ? `Kein passendes Medikament gefunden. Gelesen: „${snippet}“. Tipp: Den Namen nah und scharf fotografieren.`
+      : 'Kein Text erkannt. Tipp: Bei gutem Licht, ohne Spiegelung, nah an den aufgedruckten Namen gehen.';
+    box.innerHTML = TABLET_NOTE;
+    return;
+  }
+  info.textContent = `${hits.length === 1 ? '1 Vorschlag' : hits.length + ' Vorschläge'}: bitte den richtigen antippen und kontrollieren.`;
+  box.innerHTML = hits.map((h, i) => `
+    <button type="button" class="suggestion" data-i="${i}">
+      <strong>${esc(h.name)}</strong>${h.rx ? '<span class="badge rx">℞</span>' : ''}
+      <small>${esc([h.substance, formById(h.form).label].filter(Boolean).join(' · '))}</small>
+    </button>`).join('') + TABLET_NOTE;
+  box.onclick = ev => {
+    const b = ev.target.closest('.suggestion');
+    if (!b) return;
+    for (const [k, v] of Object.entries(hits[+b.dataset.i])) {
+      const el = F[k];
+      if (!el || v == null || v === '') continue;
+      if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
+    }
+    box.hidden = true;
+    info.textContent = '✓ Übernommen. Bitte Menge und Ablaufdatum ergänzen (steht meist auf dem Blister-Rand).';
+    updateFormHint(); updateRxWarn();
+  };
 }
 
 // ---------- Scanner ----------
@@ -454,8 +559,13 @@ function renderChecklist() {
 // ---------- Einstellungen ----------
 $('#householdName').value = store.getState().household.name;
 $('#householdName').addEventListener('change', e => { store.setHouseholdName(e.target.value); toast('Name gespeichert'); });
-$('#btnExport').addEventListener('click', () => {
-  const blob = new Blob([store.exportBackup()], { type: 'application/json' });
+$('#btnExport').addEventListener('click', async () => {
+  const data = JSON.parse(store.exportBackup());
+  data.photos = {};
+  try {
+    for (const [id, b] of Object.entries(await photos.allPhotos())) data.photos[id] = await photos.blobToDataUrl(b);
+  } catch { /* Sicherung dann ohne Fotos */ }
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `apoko-sicherung-${new Date().toISOString().slice(0, 10)}.json`;
@@ -469,6 +579,9 @@ $('#fileImport').addEventListener('change', async e => {
     const text = await file.text();
     if (!confirm('Aktuelle Daten durch die Sicherung ersetzen?')) return;
     store.importBackup(text);
+    const pics = JSON.parse(text).photos || {};
+    for (const [id, url] of Object.entries(pics)) await photos.savePhoto(id, await photos.dataUrlToBlob(url));
+    renderInventory();
     $('#householdName').value = store.getState().household.name;
     toast('Sicherung wiederhergestellt');
   } catch (err) { alert(err.message); }
@@ -477,6 +590,7 @@ $('#fileImport').addEventListener('change', async e => {
 $('#btnReset').addEventListener('click', () => {
   if (!confirm('Wirklich ALLE Daten auf diesem Gerät löschen?')) return;
   store.resetAll();
+  photos.allPhotos().then(all => Object.keys(all).forEach(id => photos.deletePhoto(id))).catch(() => {});
   $('#householdName').value = store.getState().household.name;
   toast('Alle Daten gelöscht');
 });

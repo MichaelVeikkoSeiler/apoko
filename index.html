@@ -142,8 +142,26 @@
         <button type="submit" class="btn primary">Speichern</button>
       </header>
       <div class="sheet-body">
-        <button type="button" id="btnScan" class="btn scan">📷 Strichcode scannen</button>
+        <div class="scanrow">
+          <button type="button" id="btnScan" class="btn scan">▦ Strichcode scannen</button>
+          <button type="button" id="btnRecognize" class="btn scan alt">🔍 Ohne Packung erkennen</button>
+        </div>
         <p id="scanInfo" class="scaninfo" hidden></p>
+        <div id="suggestions" class="suggestions" hidden></div>
+
+        <div class="photo-row">
+          <div id="photoBox" class="photo-box" aria-label="Produktfoto">
+            <img id="photoImg" alt="" hidden>
+            <span id="photoEmpty">📷</span>
+          </div>
+          <div class="photo-actions">
+            <label class="btn">Foto aufnehmen
+              <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+            </label>
+            <button type="button" id="btnPhotoRemove" class="btn ghost" hidden>Foto entfernen</button>
+          </div>
+        </div>
+        <input id="recognizeInput" type="file" accept="image/*" capture="environment" hidden>
 
         <input type="hidden" name="id">
         <label>Name *
