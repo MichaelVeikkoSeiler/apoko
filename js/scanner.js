@@ -26,42 +26,6 @@ async function nativeDetector() {
   } catch { return null; }
 }
 
-/** Startet nur die Kamera (für die Datumserkennung). Gibt stop() zurück. */
-export async function startCamera(video) {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error('Kamera ist in diesem Browser nicht verfügbar (HTTPS nötig).');
-  }
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false,
-  });
-  video.srcObject = stream;
-  video.setAttribute('playsinline', '');
-  await video.play();
-  return () => { stream.getTracks().forEach(t => t.stop()); video.srcObject = null; };
-}
-
-/**
- * Schneidet den Bereich unter `frameEl` aus dem Videobild aus
- * (berücksichtigt object-fit: cover). Liefert ein Canvas.
- */
-export function grabFrameRegion(video, frameEl, scale = 2) {
-  const vw = video.videoWidth, vh = video.videoHeight;
-  if (!vw || !vh) return null;
-  const vr = video.getBoundingClientRect();
-  const fr = frameEl.getBoundingClientRect();
-  const s = Math.max(vr.width / vw, vr.height / vh); // cover
-  const offX = (vr.width - vw * s) / 2, offY = (vr.height - vh * s) / 2;
-  const sx = (fr.left - vr.left - offX) / s, sy = (fr.top - vr.top - offY) / s;
-  const sw = fr.width / s, sh = fr.height / s;
-  const c = document.createElement('canvas');
-  const out = Math.min(scale, 1600 / sw);
-  c.width = Math.round(sw * out); c.height = Math.round(sh * out);
-  const ctx = c.getContext('2d');
-  ctx.filter = 'grayscale(1) contrast(1.4)';
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, c.width, c.height);
-  return c;
-}
-
 /**
  * Sucht einen Strichcode/DataMatrix-Code in einem Foto (Blob).
  * Liefert den Text des Codes oder null.

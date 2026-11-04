@@ -159,20 +159,11 @@
         <p id="scanInfo" class="scaninfo" hidden></p>
         <div id="suggestions" class="suggestions" hidden></div>
 
-        <div class="photo-row">
-          <div id="photoBox" class="photo-box" aria-label="Produktfoto">
-            <img id="photoImg" alt="" hidden>
-            <span id="photoEmpty">📷</span>
-          </div>
-          <div class="photo-actions">
-            <p id="photoSource" class="muted small">Produktbild: wird automatisch geladen, wenn ein offizielles freies Foto existiert.</p>
-            <label class="btn small-btn">Eigenes Foto (optional)
-              <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
-            </label>
-            <button type="button" id="btnPhotoRemove" class="btn ghost small-btn" hidden>Bild entfernen</button>
-          </div>
+        <div class="photos-block">
+          <p id="photoHint" class="hint small">📷 Tipp: Immer <strong>zuerst das Frontbild</strong> (Vorderseite der Packung) fotografieren, es wird beim Artikel gespeichert. Weitere Fotos, z. B. von der Rückseite, liest die App nur aus. Sie werden nicht gespeichert.</p>
+          <div id="gallery" class="gallery"></div>
+          <p id="photoSource" class="muted small" hidden></p>
         </div>
-        <input id="recognizeInput" type="file" accept="image/*" capture="environment" hidden>
 
         <input type="hidden" name="id">
         <input type="hidden" name="imageUrl">
@@ -205,9 +196,6 @@
         <label>Ablaufdatum (Monat/Jahr) *
           <input name="expiry" type="month" required placeholder="MM/JJJJ">
         </label>
-        <button type="button" id="btnExpiryPhoto" class="btn wide">📷 Ablaufdatum scannen</button>
-        <input id="expiryInput" type="file" accept="image/*" capture="environment" hidden>
-        <p id="expiryInfo" class="scaninfo" hidden></p>
         <p class="hint small">Medikamente sind bis zum letzten Tag des angegebenen Monats haltbar.</p>
 
 
@@ -264,6 +252,15 @@
       <button id="btnScanPhoto" class="btn wide">📷 Stattdessen Foto aufnehmen</button>
       <button id="btnScanClose" class="btn wide" autofocus>Schliessen</button>
     </div>
+  </dialog>
+
+  <!-- Bildansicht: mit zwei Fingern zoomen, doppelt tippen, wischen fürs nächste Bild -->
+  <dialog id="viewer" class="viewer">
+    <div id="viewerStage" class="viewer-stage"><img id="viewerImg" alt="" referrerpolicy="no-referrer"></div>
+    <button type="button" id="viewerClose" class="viewer-btn viewer-close" aria-label="Schliessen">✕</button>
+    <button type="button" id="viewerPrev" class="viewer-btn viewer-prev" aria-label="Vorheriges Bild">‹</button>
+    <button type="button" id="viewerNext" class="viewer-btn viewer-next" aria-label="Nächstes Bild">›</button>
+    <p id="viewerCount" class="viewer-count"></p>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

@@ -27,9 +27,6 @@ function getWorker() {
   return workerPromise;
 }
 
-/** Lädt die Texterkennung vorab (z. B. beim Öffnen der Datumskamera). */
-export const preloadOcr = onProgress => { progressFn = onProgress; return getWorker(); };
-
 /**
  * Liefert den erkannten Text eines Bildes (Blob oder Canvas).
  * sparse = true: verstreuten Text suchen (gut für Etiketten mit LOT/EXP).

@@ -126,6 +126,17 @@ def main():
     with open(a.out, 'w', encoding='utf-8') as f:
         json.dump(out, f, ensure_ascii=False, separators=(',', ':'))
     print('%d Packungen geschrieben nach %s' % (len(out), a.out))
+    with_atc = sum(1 for v in out.values() if v[5])
+    with_use = sum(1 for v in out.values() if v[6])
+    print('mit ATC-Code: %d, mit Anwendungsgebiet: %d' % (with_atc, with_use))
+    # Stichproben fürs Protokoll (Umgebungsvariable SAMPLE, z. B. "Iberogast|Dafalgan")
+    import os
+    if os.environ.get('SAMPLE'):
+        rx = re.compile(os.environ['SAMPLE'], re.I)
+        hits = [(k, v) for k, v in out.items() if rx.search(v[0])]
+        for k, v in hits[:12]:
+            print('  Beispiel', k, v)
+
 
 
 if __name__ == '__main__':
