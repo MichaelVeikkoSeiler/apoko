@@ -123,6 +123,8 @@ export function parseBarcode(raw) {
   s = s.replace(/^\][A-Za-z]\d/, '');
   // Manche Scanner liefern FNC1 als Text
   s = s.replace(/<GS>|\{GS\}|\\x1d/gi, GS);
+  // Viele Scanner (z. B. ZXing) liefern das führende FNC1 als GS-Zeichen mit
+  s = s.replace(/^\u001d+/, '');
 
   let fields = null;
 

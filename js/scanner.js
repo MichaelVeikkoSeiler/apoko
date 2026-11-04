@@ -27,6 +27,61 @@ async function nativeDetector() {
 }
 
 /**
+ * Sucht einen Strichcode/DataMatrix-Code in einem Foto (Blob).
+ * Liefert den Text des Codes oder null.
+ */
+export async function decodeImage(blob) {
+  const detector = await nativeDetector();
+  if (detector) {
+    try {
+      const bmp = await createImageBitmap(blob);
+      const codes = await detector.detect(bmp);
+      if (codes.length) return codes[0].rawValue;
+    } catch { /* weiter mit ZXing */ }
+  }
+  const ZXing = await loadZXing();
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
+    ZXing.BarcodeFormat.QR_CODE,
+  ]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  const reader = new ZXing.BrowserMultiFormatReader(hints);
+  const tryUrl = async url => {
+    try { return (await reader.decodeFromImageUrl(url))?.getText() || null; }
+    catch { return null; }
+  };
+  const url = URL.createObjectURL(blob);
+  try {
+    const whole = await tryUrl(url);
+    if (whole) return whole;
+    // ZXing sucht DataMatrix-Codes von der Bildmitte aus. Liegt der Code am Rand,
+    // wird er übersehen. Darum überlappende Ausschnitte (3×3, je 2/3 der Bildgrösse) prüfen.
+    const img = await createImageBitmap(blob);
+    const cw = Math.round(img.width * 2 / 3), ch = Math.round(img.height * 2 / 3);
+    const canvas = document.createElement('canvas');
+    canvas.width = cw; canvas.height = ch;
+    const ctx = canvas.getContext('2d');
+    for (const fy of [0.5, 0, 1]) {
+      for (const fx of [0.5, 0, 1]) {
+        if (fx === 0.5 && fy === 0.5) continue; // Mitte ist im Gesamtbild schon geprüft
+        const x = Math.round((img.width - cw) * fx), y = Math.round((img.height - ch) * fy);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, cw, ch);
+        ctx.drawImage(img, x, y, cw, ch, 0, 0, cw, ch);
+        const hit = await tryUrl(canvas.toDataURL('image/png'));
+        if (hit) return hit;
+      }
+    }
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+    reader.reset();
+  }
+}
+
+/**
  * Startet den Scanner im übergebenen <video>-Element.
  * Gibt eine stop()-Funktion zurück. onResult(text) wird einmal aufgerufen.
  */
