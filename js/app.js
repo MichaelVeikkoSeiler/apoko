@@ -322,6 +322,8 @@ async function openScanner(handler, hint) {
   $('#manualCode').value = '';
   $('#scanStatus').textContent = 'Kamera wird gestartet …';
   scanDlg.showModal();
+  // Nicht das Eingabefeld fokussieren, sonst öffnet sich die Tastatur und verdeckt die Kamera
+  $('#btnScanClose').focus();
   try {
     stopScan = await startScanner($('#scanVideo'), text => { closeScanner(); handler(text); });
     $('#scanStatus').textContent = hint;
