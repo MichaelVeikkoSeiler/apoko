@@ -75,3 +75,156 @@ export const NOTES = {
   expiry: 'Steht auf der Packung nur Monat und Jahr (z. B. 12/2027), ist das Medikament bis zum letzten Tag dieses Monats haltbar.',
   storage: 'Die meisten Medikamente gehören trocken, dunkel, bei Raumtemperatur (15 bis 25 °C) und für Kinder unerreichbar gelagert. Das Badezimmer ist wegen der Feuchtigkeit ungünstig.',
 };
+
+/**
+ * Anwendung in einfacher Sprache nach ATC-Code (Anatomisch-Therapeutisch-Chemische
+ * Klassifikation der WHO). Der längste passende Präfix gewinnt.
+ * Bewusst allgemein formuliert: Massgebend ist die Packungsbeilage.
+ */
+export const ATC_USES = {
+  // A – Verdauung und Stoffwechsel
+  A01A: 'Bei Entzündungen und Schmerzen im Mund und Rachen',
+  A02: 'Gegen Sodbrennen und saures Aufstossen',
+  A02B: 'Gegen Sodbrennen und zum Schutz des Magens',
+  A03: 'Gegen Bauchkrämpfe',
+  A03F: 'Gegen Übelkeit und Völlegefühl',
+  A04: 'Gegen Übelkeit und Erbrechen',
+  A05: 'Für Galle und Leber',
+  A06: 'Gegen Verstopfung',
+  A07A: 'Gegen Infektionen im Darm',
+  A07B: 'Gegen Durchfall (bindet Giftstoffe im Darm)',
+  A07C: 'Ersetzt Flüssigkeit und Salze bei Durchfall',
+  A07D: 'Gegen Durchfall',
+  A07F: 'Baut die Darmflora auf, z. B. bei Durchfall',
+  A07: 'Gegen Durchfall und Darmbeschwerden',
+  A08: 'Zur Gewichtsabnahme',
+  A09: 'Unterstützt die Verdauung',
+  A10: 'Gegen Diabetes (senkt den Blutzucker)',
+  A11: 'Vitamine',
+  A12: 'Mineralstoffe (z. B. Kalzium, Magnesium)',
+  A12C: 'Mineralstoffe (z. B. Magnesium, Zink)',
+  A13: 'Stärkungsmittel',
+  // B – Blut
+  B01: 'Hemmt die Blutgerinnung (Blutverdünnung)',
+  B02: 'Fördert die Blutgerinnung',
+  B03: 'Gegen Blutarmut (z. B. Eisenmangel)',
+  B05: 'Infusionen und Spüllösungen',
+  // C – Herz und Kreislauf
+  C01: 'Für das Herz',
+  C02: 'Gegen Bluthochdruck',
+  C03: 'Entwässernd (z. B. bei Bluthochdruck)',
+  C04: 'Fördert die Durchblutung',
+  C05A: 'Gegen Hämorrhoiden',
+  C05B: 'Gegen Krampfadern und schwere Beine',
+  C05: 'Für die Venen',
+  C07: 'Gegen Bluthochdruck und für das Herz',
+  C08: 'Gegen Bluthochdruck',
+  C09: 'Gegen Bluthochdruck',
+  C10: 'Senkt die Blutfette (Cholesterin)',
+  // D – Haut
+  D01: 'Gegen Pilzinfektionen der Haut und Nägel',
+  D02: 'Pflegt und schützt trockene oder wunde Haut',
+  D03: 'Fördert die Wundheilung',
+  D04: 'Gegen Juckreiz, z. B. nach Insektenstichen',
+  D05: 'Gegen Schuppenflechte',
+  D06: 'Gegen Infektionen der Haut',
+  D06BB: 'Gegen Lippenherpes und Virusinfektionen der Haut',
+  D07: 'Gegen Hautentzündungen und Juckreiz (Kortison)',
+  D08: 'Zum Desinfizieren von Haut und Wunden',
+  D09: 'Wundverband mit Wirkstoff',
+  D10: 'Gegen Akne',
+  D11: 'Für Haut, Haare und Nägel',
+  // G – Urogenital
+  G01: 'Gegen Infektionen im Intimbereich',
+  G02: 'Für den Intimbereich',
+  G03A: 'Zur Empfängnisverhütung',
+  G03: 'Hormone',
+  G04BD: 'Gegen häufigen Harndrang und Blasenschwäche',
+  G04B: 'Für Blase und Harnwege',
+  G04C: 'Bei Prostatabeschwerden',
+  G04: 'Für Blase und Harnwege',
+  // H – Hormone
+  H02: 'Kortison gegen Entzündungen und Allergien',
+  H03: 'Für die Schilddrüse',
+  // J – Infektionen
+  J01: 'Antibiotikum gegen bakterielle Infektionen',
+  J02: 'Gegen Pilzinfektionen',
+  J04: 'Gegen Tuberkulose',
+  J05: 'Gegen Virusinfektionen',
+  J06: 'Stärkt die Abwehr (Antikörper)',
+  J07: 'Impfstoff',
+  // L – Krebs und Immunsystem
+  L01: 'Gegen Krebs',
+  L02: 'Hormontherapie gegen Krebs',
+  L03: 'Stärkt das Immunsystem',
+  L04: 'Unterdrückt das Immunsystem',
+  // M – Muskeln und Gelenke
+  M01: 'Gegen Schmerzen und Entzündungen, z. B. in Gelenken und Rücken',
+  M01AE: 'Gegen Schmerzen, Entzündungen und Fieber',
+  M02: 'Zum Einreiben bei Muskel- und Gelenkschmerzen',
+  M03: 'Löst Muskelverspannungen',
+  M04: 'Gegen Gicht',
+  M05: 'Stärkt die Knochen',
+  // N – Nervensystem
+  N01: 'Zur Betäubung',
+  N01B: 'Zur örtlichen Betäubung',
+  N02A: 'Starkes Schmerzmittel',
+  N02B: 'Gegen Schmerzen und Fieber',
+  N02BA: 'Gegen Schmerzen, Fieber und Erkältungsbeschwerden',
+  N02C: 'Gegen Migräne',
+  N03: 'Gegen Epilepsie',
+  N04: 'Gegen Parkinson',
+  N05A: 'Gegen Psychosen',
+  N05B: 'Beruhigend, gegen Angst und Unruhe',
+  N05C: 'Zum Einschlafen',
+  N05CM: 'Pflanzlich beruhigend und zum Einschlafen',
+  N06A: 'Gegen Depression',
+  N06B: 'Fördert Konzentration und Aufmerksamkeit',
+  N06D: 'Gegen Demenz',
+  N07B: 'Gegen Abhängigkeit (z. B. Rauchstopp)',
+  N07C: 'Gegen Schwindel',
+  // P – Parasiten
+  P01: 'Gegen Parasiten (z. B. Malaria)',
+  P02: 'Gegen Wurmbefall',
+  P03: 'Gegen Läuse, Krätze und Insekten',
+  // R – Atemwege
+  R01A: 'Abschwellend bei verstopfter Nase',
+  R01AD: 'Gegen Heuschnupfen und Entzündungen der Nase (Kortison)',
+  R01AC: 'Gegen Heuschnupfen in der Nase',
+  R01: 'Für die Nase',
+  R02: 'Gegen Halsschmerzen',
+  R03: 'Gegen Asthma und Atemnot',
+  R05C: 'Löst Schleim bei Husten',
+  R05D: 'Gegen trockenen Reizhusten',
+  R05: 'Gegen Husten und Erkältung',
+  R06: 'Gegen Allergien (z. B. Heuschnupfen, Juckreiz)',
+  R07: 'Für die Atemwege',
+  // S – Augen und Ohren
+  S01A: 'Gegen Infektionen am Auge',
+  S01B: 'Gegen Entzündungen am Auge',
+  S01E: 'Gegen grünen Star (Glaukom)',
+  S01G: 'Gegen allergische, juckende oder gerötete Augen',
+  S01X: 'Befeuchtet und pflegt die Augen',
+  S01: 'Für die Augen',
+  S02: 'Für die Ohren (z. B. Ohrenschmerzen)',
+  S03: 'Für Augen und Ohren',
+  // V – Verschiedenes
+  V01: 'Allergietest oder Allergiebehandlung',
+  V03AB: 'Gegenmittel bei Vergiftungen',
+  V06: 'Spezialnahrung',
+};
+
+/** Einfache Anwendung zu einem ATC-Code (längster Präfix), sonst ''. */
+export function useFromAtc(atc) {
+  const code = String(atc || '').toUpperCase().replace(/\s/g, '');
+  for (let len = Math.min(code.length, 7); len >= 3; len--) {
+    const hit = ATC_USES[code.slice(0, len)];
+    if (hit) return hit;
+  }
+  return '';
+}
+
+/** Standardanwendung für Produkte ohne ATC-Code, nach Darreichungsform. */
+export const FORM_USES = {
+  pflaster: 'Zum Abdecken und Schützen kleiner Wunden',
+};

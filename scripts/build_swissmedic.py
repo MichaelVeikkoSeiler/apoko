@@ -6,7 +6,7 @@
   python scripts/build_swissmedic.py --xlsx liste.xlsx data/swissmedic.json
 
 Ergebnis: { "<Zulassungsnr 5-stellig><Packungscode 3-stellig>":
-            [Bezeichnung, Wirkstoffe, Packungsgrösse, Einheit, Abgabekategorie] }
+            [Bezeichnung, Wirkstoffe, Packungsgrösse, Einheit, Abgabekategorie, ATC-Code, Anwendungsgebiet] }
 Die GTIN Schweizer Arzneimittel ist 7680 + Zulassungsnr + Packungscode + Prüfziffer.
 """
 import argparse
@@ -30,6 +30,8 @@ COLUMNS = {
     'unit': [r'^einheit'],
     'cat': [r'abgabekategorie\s*packung', r'abgabekategorie\s*dosis', r'abgabekategorie'],
     'substance': [r'wirkstoff'],
+    'atc': [r'^atc'],
+    'use': [r'anwendungsgebiet arzneimittel', r'anwendungsgebiet'],
 }
 
 
@@ -104,6 +106,8 @@ def convert(xlsx_bytes):
             size if isinstance(size, (int, float)) else norm(size),
             norm(get(row, 'unit')),
             cat if cat in 'ABCDE' else '',
+            norm(get(row, 'atc')).upper().replace(' ', ''),
+            norm(get(row, 'use'))[:160],
         ]
     if len(out) < 1000:
         sys.exit('Nur %d Packungen gelesen, das ist zu wenig.' % len(out))

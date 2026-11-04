@@ -2,6 +2,7 @@
 // data/swissmedic.json wird beim Veröffentlichen (GitHub Actions) frisch erzeugt
 // und erst beim ersten Scan eines Schweizer Arzneimittels geladen.
 import { swissmedicInfo } from './gs1.js';
+import { useFromAtc } from './knowledge.js';
 
 let dbPromise = null;
 
@@ -57,7 +58,7 @@ function extractStrength(name) {
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
 function rowToFields(row, { withQuantity = true } = {}) {
-  const [name, substance, size, unit, category] = row;
+  const [name, substance, size, unit, category, atc, use] = row;
   const qty = typeof size === 'number' ? size : parseFloat(String(size).replace(',', '.'));
   return {
     name,
@@ -68,6 +69,8 @@ function rowToFields(row, { withQuantity = true } = {}) {
     unit: mapUnit(unit),
     category: ['A', 'B', 'D', 'E'].includes(category) ? category : '',
     rx: category === 'A' || category === 'B' ? true : category ? false : null,
+    // Einfache Erklärung nach ATC-Gruppe, sonst der Swissmedic-Text
+    usage: useFromAtc(atc) || cap(String(use || '').replace(/\s+/g, ' ').trim()),
   };
 }
 

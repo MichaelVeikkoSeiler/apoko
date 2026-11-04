@@ -179,14 +179,12 @@
         <label>Name *
           <input name="name" required placeholder="z. B. Dafalgan 500 mg" autocomplete="off">
         </label>
-        <div class="grid2">
-          <label>Wirkstoff
-            <input name="substance" placeholder="z. B. Paracetamol" autocomplete="off">
-          </label>
-          <label>Stärke
-            <input name="strength" placeholder="z. B. 500 mg" autocomplete="off">
-          </label>
-        </div>
+        <!-- intern (für Suche und Checkliste), nicht angezeigt -->
+        <input type="hidden" name="substance">
+        <input type="hidden" name="strength">
+        <label>Standardanwendung
+          <textarea name="usage" rows="2" placeholder="Wird beim Scannen automatisch ergänzt, z. B. „Gegen Schmerzen und Fieber“"></textarea>
+        </label>
         <label>Darreichungsform
           <select name="form" id="formSelect"></select>
         </label>

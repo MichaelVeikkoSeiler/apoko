@@ -1,5 +1,5 @@
 import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
-import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, formById } from './knowledge.js';
+import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, FORM_USES, formById } from './knowledge.js';
 import * as store from './store.js';
 import { startScanner, decodeImage, startCamera, grabFrameRegion } from './scanner.js';
 import { lookupSwissDrug, searchByText, guessForm } from './drugdb.js';
@@ -79,7 +79,7 @@ const FORM_ICON = {
 
 function matches(item, q) {
   if (!q) return true;
-  const hay = [item.name, item.substance, item.strength, item.location, item.person, item.notes, formById(item.form).label]
+  const hay = [item.name, item.substance, item.strength, item.usage, item.location, item.person, item.notes, formById(item.form).label]
     .join(' ').toLowerCase();
   return q.toLowerCase().split(/\s+/).every(w => hay.includes(w));
 }
@@ -365,6 +365,7 @@ function autoFormFromName() {
     F.unit.value = formById(f).unit;
     updateFormHint();
   }
+  if (f && FORM_USES[f] && !F.usage.value) F.usage.value = FORM_USES[f];
 }
 F.name.addEventListener('change', autoFormFromName);
 
@@ -443,6 +444,7 @@ function readForm() {
     id: F.id.value || undefined,
     name: F.name.value.trim(),
     substance: F.substance.value.trim(),
+    usage: F.usage.value.trim(),
     strength: F.strength.value.trim(),
     form: F.form.value,
     quantity: num(F.quantity.value),
@@ -500,7 +502,11 @@ $('#btnDelete').addEventListener('click', () => {
   dlg.close();
   toast('Gelöscht');
 });
-$('#fab').addEventListener('click', () => openItem(null));
+// „+ Erfassen“ öffnet direkt die Kamera für den Strichcode; Schliessen führt ins Formular
+$('#fab').addEventListener('click', () => {
+  openItem(null);
+  openScanner(applyScan, 'Am besten den quadratischen DataMatrix-Code scannen, er enthält auch das Ablaufdatum.');
+});
 
 async function applyScan(raw) {
   const r = parseBarcode(raw);
@@ -543,6 +549,7 @@ async function applyScan(raw) {
         fill({ name: prod.name, quantity: prod.quantity });
         const form = guessForm(prod.name);
         if (form) { F.form.value = form; F.unit.value = formById(form).unit; }
+        if (form && FORM_USES[form] && !F.usage.value) F.usage.value = FORM_USES[form];
         if (prod.unit) F.unit.value = prod.unit;
         if (prod.imageUrl) {
           F.imageUrl.value = prod.imageUrl;
@@ -958,6 +965,16 @@ $('#btnReset').addEventListener('click', () => {
 store.onChange(() => { renderInventory(); renderLocationSettings(); if ($('#view-linked').classList.contains('active')) renderLinked(); });
 renderInventory();
 handleHash();
+
+// Bestehende Artikel: fehlende Standardanwendung einmalig ergänzen
+(async () => {
+  for (const it of store.getState().items.filter(i => !i.usage)) {
+    let usage = '';
+    if (it.gtin && swissmedicInfo(it.gtin)) usage = (await lookupSwissDrug(it.gtin).catch(() => null))?.usage || '';
+    if (!usage) usage = FORM_USES[it.form] || '';
+    if (usage) store.upsertItem({ id: it.id, usage });
+  }
+})();
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
