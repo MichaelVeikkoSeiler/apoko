@@ -53,19 +53,29 @@ function showView(name) {
   $('#fab').hidden = name !== 'inventory';
   if (name === 'linked') renderLinked();
   if (name === 'check') renderChecklist();
+  if (name === 'settings') renderLocationSettings();
   window.scrollTo(0, 0);
 }
 $$('.tab').forEach(t => t.addEventListener('click', () => showView(t.dataset.view)));
 
 // ---------- Vorrat ----------
+/** Kurz: „17 Monate“, „45 Tage“, „Abgelaufen“. */
 function describeDays(days) {
-  if (days == null) return 'Kein Ablaufdatum';
-  if (days < 0) return `Abgelaufen seit ${-days} ${-days === 1 ? 'Tag' : 'Tagen'}`;
-  if (days === 0) return 'Läuft heute ab';
-  if (days < 60) return `Läuft ab in ${days} ${days === 1 ? 'Tag' : 'Tagen'}`;
+  if (days == null) return 'Kein Datum';
+  if (days < 0) return 'Abgelaufen';
+  if (days === 0) return 'Heute';
+  if (days < 60) return `${days} ${days === 1 ? 'Tag' : 'Tage'}`;
   const months = Math.round(days / 30.4);
-  return months < 24 ? `Haltbar noch ${months} Monate` : `Haltbar noch ${Math.round(days / 365)} Jahre`;
+  return months < 24 ? `${months} Monate` : `${Math.round(days / 365)} Jahre`;
 }
+
+// Symbol als Platzhalter, wenn kein Produktbild da ist
+const FORM_ICON = {
+  tablette: '💊', kapsel: '💊', brausetablette: '🫧', lutschtablette: '🍬', pulver: '🧂',
+  sirup: '🧴', tropfen: '💧', augentropfen: '👁️', ohrentropfen: '👂', nasenspray: '👃', spray: '🧴',
+  inhalator: '🌬️', salbe: '🧴', zaepfchen: '💊', pflaster: '🩹', injektion: '💉', loesung: '🧪',
+  medizinprodukt: '🩺', andere: '📦',
+};
 
 function matches(item, q) {
   if (!q) return true;
@@ -98,24 +108,26 @@ function itemCard(item, { readonly = false } = {}) {
   const st = store.expiryStatus(item);
   const form = formById(item.form);
   const pct = item.quantity > 0 && item.remaining != null ? Math.max(0, Math.min(100, item.remaining / item.quantity * 100)) : null;
+  const icon = `<span class="thumb ph" aria-hidden="true">${FORM_ICON[form.id] || '📦'}</span>`;
+  const thumb = readonly ? icon
+    : item.hasPhoto ? `<img class="thumb" data-photo="${esc(item.id)}" alt="">`
+    : item.imageUrl ? `<img class="thumb" src="${esc(item.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+    : icon;
   return `
-    <li class="item ${st.status}${!readonly && (item.hasPhoto || item.imageUrl) ? ' has-photo' : ''}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
-      ${readonly ? '' : item.hasPhoto ? `<img class="thumb" data-photo="${esc(item.id)}" alt="">`
-        : item.imageUrl ? `<img class="thumb" src="${esc(item.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}
-      <div>
-        <h3>${esc(item.name)}${item.strength && !item.name.toLowerCase().includes(item.strength.toLowerCase()) ?` <span class="muted">${esc(item.strength)}</span>` : ''}</h3>
-        <div class="meta">${esc([item.substance, form.label].filter(Boolean).join(' · '))}</div>
+    <li class="item ${st.status}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
+      ${thumb}
+      <div class="main">
+        <h3>${esc(item.name)}${item.strength && !item.name.toLowerCase().includes(item.strength.toLowerCase()) ? ` <span class="muted">${esc(item.strength)}</span>` : ''}</h3>
         ${!readonly && (item.location || item.person) ? `<div class="meta">${esc([item.location && '📍 ' + item.location, item.person && '👤 ' + item.person].filter(Boolean).join('   '))}</div>` : ''}
+        <div class="badges">
+          <span class="badge ${st.status}" title="${st.eff ? 'bis ' + fmtMonth(st.eff.date) : ''}">${describeDays(st.days)}</span>
+          ${item.rx ? `<span class="badge rx">℞ Rezept${item.category ? ' · ' + esc(item.category) : ''}</span>` : ''}
+          ${!readonly && item.shared ? '<span class="badge shared">🔗 Geteilt</span>' : ''}
+        </div>
       </div>
       <div class="right">
         <div>${esc(amountText(item))}</div>
         ${pct != null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}
-        <div class="muted">${st.eff ? fmtMonth(st.eff.date) : ''}</div>
-      </div>
-      <div class="badges">
-        <span class="badge ${st.status}">${describeDays(st.days)}</span>
-        ${item.rx ? `<span class="badge rx">℞ Rezeptpflichtig${item.category ? ' · ' + esc(item.category) : ''}</span>` : ''}
-        ${!readonly && item.shared ? '<span class="badge shared">🔗 Geteilt</span>' : ''}
       </div>
     </li>`;
 }
@@ -123,6 +135,7 @@ function itemCard(item, { readonly = false } = {}) {
 function renderInventory() {
   const { items, household } = store.getState();
   $('#householdLabel').textContent = household.name;
+  renderLocationFilter();
 
   const withStatus = items.map(i => ({ i, st: store.expiryStatus(i) }));
   const counts = {
@@ -142,7 +155,7 @@ function renderInventory() {
 
   const order = { expired: 0, soon: 1, ok: 2, unknown: 3 };
   const list = withStatus
-    .filter(x => passFilter(x.i, x.st) && matches(x.i, query))
+    .filter(x => passFilter(x.i, x.st) && passLocation(x.i) && matches(x.i, query))
     .sort((a, b) => order[a.st.status] - order[b.st.status] || (a.st.days ?? 1e9) - (b.st.days ?? 1e9) || a.i.name.localeCompare(b.i.name));
 
   $('#itemList').innerHTML = list.map(x => itemCard(x.i)).join('') ||
@@ -150,7 +163,8 @@ function renderInventory() {
   $('#emptyState').hidden = items.length > 0;
   $$('#itemList img[data-photo]').forEach(async img => {
     const url = await photos.photoUrl(img.dataset.photo);
-    if (url) img.src = url; else img.remove();
+    if (url) img.src = url;
+    else img.replaceWith(Object.assign(document.createElement('span'), { className: 'thumb ph', textContent: '📦' }));
   });
   $$('#filters .chip').forEach(c => c.classList.toggle('active', c.dataset.filter === filter));
 }
@@ -179,9 +193,71 @@ $('#categorySelect').innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${
 function fillDatalists() {
   const { items } = store.getState();
   const uniq = key => [...new Set(items.map(i => i[key]).filter(Boolean))].sort();
-  $('#locations').innerHTML = uniq('location').map(v => `<option value="${esc(v)}">`).join('');
   $('#persons').innerHTML = uniq('person').map(v => `<option value="${esc(v)}">`).join('');
+  renderLocationChips();
 }
+
+// ---------- Standorte ----------
+const sameLoc = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+
+function renderLocationChips() {
+  const current = F.location.value;
+  $('#locationChips').innerHTML = store.getState().locations
+    .map(l => `<button type="button" class="chip loc${sameLoc(l, current) ? ' active' : ''}" data-loc="${esc(l)}">📍 ${esc(l)}</button>`)
+    .join('');
+}
+$('#locationChips').addEventListener('click', e => {
+  const b = e.target.closest('[data-loc]');
+  if (!b) return;
+  // Nochmals antippen = abwählen
+  F.location.value = sameLoc(F.location.value, b.dataset.loc) ? '' : b.dataset.loc;
+  renderLocationChips();
+});
+F.location.addEventListener('input', renderLocationChips);
+
+let locationFilter = '';
+function renderLocationFilter() {
+  const { locations, items } = store.getState();
+  const used = [...new Set(items.map(i => (i.location || '').trim()).filter(Boolean))];
+  const all = [...locations, ...used.filter(u => !locations.some(l => sameLoc(l, u)))];
+  if (locationFilter && locationFilter !== '__none' && !all.some(l => sameLoc(l, locationFilter))) locationFilter = '';
+  $('#locationFilter').innerHTML = '<option value="">Alle Standorte</option>'
+    + all.map(l => `<option${sameLoc(l, locationFilter) ? ' selected' : ''}>${esc(l)}</option>`).join('')
+    + (items.some(i => !i.location) ? `<option value="__none"${locationFilter === '__none' ? ' selected' : ''}>Ohne Standort</option>` : '');
+  $('#locationFilter').hidden = !all.length;
+}
+$('#locationFilter').addEventListener('change', e => { locationFilter = e.target.value; renderInventory(); });
+const passLocation = item => !locationFilter
+  || (locationFilter === '__none' ? !item.location : sameLoc(item.location, locationFilter));
+
+function renderLocationSettings() {
+  const { locations, items } = store.getState();
+  $('#locationList').innerHTML = locations.length
+    ? locations.map(l => {
+      const n = items.filter(i => sameLoc(i.location, l)).length;
+      return `<li><span class="locname">📍 ${esc(l)}</span><span class="count">${n} Artikel</span>
+        <button class="btn ghost" data-rename="${esc(l)}">Umbenennen</button>
+        <button class="btn ghost" data-remove-loc="${esc(l)}" aria-label="${esc(l)} löschen">✕</button></li>`;
+    }).join('')
+    : '<li class="muted small">Noch keine Standorte.</li>';
+}
+$('#btnAddLocation').addEventListener('click', () => {
+  const v = $('#newLocation').value.trim();
+  if (!v) return;
+  if (store.addLocation(v)) toast(`Standort „${v}“ gespeichert`);
+  else toast('Diesen Standort gibt es schon.');
+  $('#newLocation').value = '';
+});
+$('#newLocation').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnAddLocation').click(); });
+$('#locationList').addEventListener('click', e => {
+  const del = e.target.closest('[data-remove-loc]')?.dataset.removeLoc;
+  const ren = e.target.closest('[data-rename]')?.dataset.rename;
+  if (del && confirm(`Standort „${del}“ aus der Liste löschen? Artikel behalten ihren Eintrag.`)) store.removeLocation(del);
+  if (ren) {
+    const nn = prompt('Neuer Name für den Standort:', ren);
+    if (nn && nn.trim() && nn.trim() !== ren) store.renameLocation(ren, nn);
+  }
+});
 
 function updateFormHint() {
   const f = formById(F.form.value);
@@ -813,7 +889,7 @@ $('#btnReset').addEventListener('click', () => {
 });
 
 // ---------- Start ----------
-store.onChange(() => { renderInventory(); if ($('#view-linked').classList.contains('active')) renderLinked(); });
+store.onChange(() => { renderInventory(); renderLocationSettings(); if ($('#view-linked').classList.contains('active')) renderLinked(); });
 renderInventory();
 handleHash();
 

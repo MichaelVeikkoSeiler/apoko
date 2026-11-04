@@ -9,7 +9,18 @@ const empty = () => ({
   items: [],
   catalog: {},   // GTIN -> zuletzt erfasste Produktdaten (für Autovervollständigung)
   linked: [],    // verbundene Haushalte: { id, name, importedAt, sharedAt, items[] }
+  locations: [], // gespeicherte Standorte (Lagerorte)
 });
+
+/** Ältere Daten: Standorte aus den vorhandenen Artikeln übernehmen. */
+function migrate(s) {
+  if (!Array.isArray(s.locations)) s.locations = [];
+  for (const it of s.items || []) {
+    const loc = (it.location || '').trim();
+    if (loc && !s.locations.some(l => l.toLowerCase() === loc.toLowerCase())) s.locations.push(loc);
+  }
+  return s;
+}
 
 export function uid() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -23,7 +34,7 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw);
-      return { ...empty(), ...s };
+      return migrate({ ...empty(), ...s });
     }
   } catch (e) { console.warn('Speicher nicht lesbar', e); }
   return empty();
@@ -45,12 +56,42 @@ export function setHouseholdName(name) {
   save();
 }
 
+// ---- Standorte ----
+const sameLoc = (a, b) => a.toLowerCase() === b.toLowerCase();
+
+export function addLocation(name, persist = true) {
+  const loc = String(name || '').trim();
+  if (!loc || state.locations.some(l => sameLoc(l, loc))) return false;
+  state.locations.push(loc);
+  state.locations.sort((a, b) => a.localeCompare(b, 'de'));
+  if (persist) save();
+  return true;
+}
+
+/** Entfernt einen Standort aus der Liste (Artikel behalten ihren Eintrag). */
+export function removeLocation(name) {
+  state.locations = state.locations.filter(l => !sameLoc(l, name));
+  save();
+}
+
+/** Benennt einen Standort um, auch bei allen Artikeln. */
+export function renameLocation(oldName, newName) {
+  const nn = String(newName || '').trim();
+  if (!nn) return;
+  state.locations = state.locations.filter(l => !sameLoc(l, oldName) && !sameLoc(l, nn));
+  state.locations.push(nn);
+  state.locations.sort((a, b) => a.localeCompare(b, 'de'));
+  for (const it of state.items) if (it.location && sameLoc(it.location, oldName)) it.location = nn;
+  save();
+}
+
 export function upsertItem(item) {
   const now = new Date().toISOString();
   const i = state.items.findIndex(x => x.id === item.id);
   if (i >= 0) state.items[i] = { ...state.items[i], ...item, updatedAt: now };
   else state.items.push({ ...item, id: item.id || uid(), createdAt: now, updatedAt: now });
 
+  addLocation(item.location, false);
   if (item.gtin) {
     state.catalog[normalizeGtin(item.gtin)] = {
       name: item.name, substance: item.substance, strength: item.strength,
@@ -92,7 +133,7 @@ export function exportBackup() {
 export function importBackup(json) {
   const data = JSON.parse(json);
   if (data.app !== 'apoko' || !Array.isArray(data.items)) throw new Error('Keine gültige Apoko-Sicherung.');
-  state = { ...empty(), household: data.household, items: data.items, catalog: data.catalog || {}, linked: data.linked || [] };
+  state = migrate({ ...empty(), household: data.household, items: data.items, catalog: data.catalog || {}, linked: data.linked || [], locations: data.locations });
   save();
 }
 

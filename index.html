@@ -28,8 +28,9 @@
     <section id="view-inventory" class="view active" aria-label="Vorrat">
       <div id="alerts"></div>
       <div class="stats" id="stats"></div>
-      <div class="searchbar">
-        <input id="search" type="search" placeholder="Suchen: Name, Wirkstoff, Lagerort …" autocomplete="off">
+      <div class="searchbar searchrow">
+        <input id="search" type="search" placeholder="Suchen: Name, Wirkstoff …" autocomplete="off">
+        <select id="locationFilter" aria-label="Standort"><option value="">Alle Standorte</option></select>
       </div>
       <div class="chips" id="filters" role="tablist">
         <button class="chip active" data-filter="all">Alle</button>
@@ -103,6 +104,15 @@
           <input id="householdName" type="text" maxlength="40">
         </label>
         <p class="muted small">Unter diesem Namen sehen dich verbundene Haushalte.</p>
+      </div>
+      <div class="card">
+        <h2>Standorte</h2>
+        <p class="muted small">Wo bewahrst du Medikamente auf? Neue Standorte aus dem Formular kommen automatisch dazu.</p>
+        <ul id="locationList" class="loclist"></ul>
+        <div class="row">
+          <input id="newLocation" type="text" placeholder="z. B. Badschrank, Küche, Auto" maxlength="40" autocomplete="off">
+          <button id="btnAddLocation" class="btn">Hinzufügen</button>
+        </div>
       </div>
       <div class="card">
         <h2>Datensicherung</h2>
@@ -218,16 +228,14 @@
           <p id="rxShareWarn" class="warn" hidden></p>
         </fieldset>
 
-        <div class="grid2">
-          <label>Lagerort
-            <input name="location" placeholder="z. B. Badschrank" list="locations" autocomplete="off">
-            <datalist id="locations"></datalist>
-          </label>
-          <label>Für Person
-            <input name="person" placeholder="optional" list="persons" autocomplete="off">
-            <datalist id="persons"></datalist>
-          </label>
-        </div>
+        <label>Standort
+          <input name="location" placeholder="Antippen oder neuen Standort eingeben" autocomplete="off">
+        </label>
+        <div id="locationChips" class="chips wrap"></div>
+        <label>Für Person
+          <input name="person" placeholder="optional" list="persons" autocomplete="off">
+          <datalist id="persons"></datalist>
+        </label>
         <!-- intern: Strichcode (Wiedererkennung beim nächsten Scan) und Charge (aus DataMatrix) -->
         <input type="hidden" name="gtin">
         <input type="hidden" name="batch">
