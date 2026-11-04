@@ -95,7 +95,7 @@ export function upsertItem(item) {
   if (item.gtin) {
     state.catalog[normalizeGtin(item.gtin)] = {
       name: item.name, substance: item.substance, strength: item.strength,
-      form: item.form, quantity: item.quantity, unit: item.unit, usage: item.usage,
+      form: item.form, quantity: item.quantity, unit: item.unit, usage: item.usage, atc: item.atc,
       rx: item.rx, category: item.category, imageUrl: item.imageUrl,
     };
   }

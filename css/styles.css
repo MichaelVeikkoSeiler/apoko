@@ -315,3 +315,25 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .viewer-count { position: absolute; z-index: 2; bottom: calc(12px + env(safe-area-inset-bottom)); left: 0; right: 0; text-align: center; color: #fff; margin: 0; font-size: .85rem; text-shadow: 0 1px 2px #000; }
 .viewer-stage img { transform-origin: center; }
 .gbadge.info { background: rgb(0 0 0 / .55); color: #fff; font-weight: 500; }
+
+/* Beschwerden */
+.tabbar { grid-template-columns: repeat(5, 1fr); }
+.tab { font-size: .66rem; }
+#complaint { margin-top: 6px; }
+#symptomChips { margin-top: 8px; }
+.chip.sym.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.advice { margin-bottom: 12px; }
+.advice h2 { display: flex; align-items: center; gap: 8px; }
+.advice .redflag { background: var(--danger-soft); color: var(--danger); border-radius: 10px; padding: 8px 10px; font-size: .85rem; margin: 8px 0; }
+.advice .redflag strong { display: block; }
+.advice .tip { font-size: .88rem; margin: 8px 0; }
+.advice .none { background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 8px 10px; font-size: .88rem; }
+.advice h3 { font-size: .9rem; margin: 12px 0 6px; }
+.rec { display: flex; gap: 10px; align-items: center; padding: 8px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; background: var(--surface); cursor: pointer; }
+.rec .thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex: none; background: var(--bg); display: grid; place-items: center; font-size: 1.3rem; border: 1px solid var(--border); }
+.rec .txt { min-width: 0; flex: 1; }
+.rec .txt strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rec .txt small { display: block; color: var(--muted); }
+.rec.rx { border-color: var(--rx); }
+.rec.expired { opacity: .65; cursor: default; }
+.emergency { text-align: center; color: var(--muted); margin: 16px 0 8px; }

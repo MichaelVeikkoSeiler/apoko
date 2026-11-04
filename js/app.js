@@ -6,6 +6,7 @@ import { lookupSwissDrug, searchByText, guessForm } from './drugdb.js';
 import { lookupOpenProduct } from './productdb.js';
 import * as photos from './photos.js';
 import { recognizeText } from './ocr.js';
+import { SYMPTOMS, EMERGENCY, detectSymptoms, adviseFor } from './advice.js';
 import { buildShareCode, shareLink, parseShareCode, sharedItems } from './share.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -52,6 +53,7 @@ function showView(name) {
   $('#fab').hidden = name !== 'inventory';
   if (name === 'linked') renderLinked();
   if (name === 'check') renderChecklist();
+  if (name === 'help') renderHelp();
   if (name === 'settings') renderLocationSettings();
   window.scrollTo(0, 0);
 }
@@ -487,6 +489,7 @@ function readForm() {
     name: F.name.value.trim(),
     substance: F.substance.value.trim(),
     usage: F.usage.value.trim(),
+    atc: F.atc.value.trim(),
     strength: F.strength.value.trim(),
     form: F.form.value,
     quantity: num(F.quantity.value),
@@ -921,6 +924,84 @@ function handleHash() {
 }
 window.addEventListener('hashchange', handleHash);
 
+// ---------- Beschwerden: Empfehlung aus dem Vorrat ----------
+const pickedSymptoms = new Set();
+
+let showAllSymptoms = false;
+
+function renderSymptomChips(detected = []) {
+  const active = s => pickedSymptoms.has(s.id) || detected.includes(s.id);
+  const anyActive = SYMPTOMS.some(active);
+  // Ist etwas gewählt, nur die aktiven zeigen (die Empfehlung soll nicht weit unten landen)
+  const list = anyActive && !showAllSymptoms ? SYMPTOMS.filter(active) : SYMPTOMS;
+  $('#symptomChips').innerHTML = list.map(s =>
+    `<button type="button" class="chip sym${active(s) ? ' active' : ''}" data-sym="${s.id}">${s.icon} ${esc(s.label)}</button>`).join('')
+    + (anyActive ? `<button type="button" class="chip" data-more>${showAllSymptoms ? '− weniger' : '＋ weitere'}</button>` : '');
+}
+
+function recRow(item, st, { linkedName = '', expired = false } = {}) {
+  const loc = [item.location && '📍 ' + item.location, item.person && '👤 für ' + item.person].filter(Boolean).join('  ');
+  const keys = photoKeys(item);
+  const thumb = item.imageUrl ? `<img class="thumb" src="${esc(item.imageUrl)}" alt="" referrerpolicy="no-referrer">`
+    : keys[0] && !linkedName ? `<img class="thumb" data-photo="${esc(keys[0])}" alt="">`
+    : `<span class="thumb">${FORM_ICON[item.form] || '📦'}</span>`;
+  const sub = [item.usage, linkedName ? '🏠 ' + linkedName : loc, st && !expired ? describeDays(st.days) : ''].filter(Boolean).join(' · ');
+  return `<div class="rec${item.rx ? ' rx' : ''}${expired ? ' expired' : ''}" ${linkedName || expired ? '' : `data-open="${esc(item.id)}"`}>
+    ${thumb}<div class="txt"><strong>${esc(item.name)}</strong><small>${esc(sub)}</small></div></div>`;
+}
+
+function renderHelp() {
+  const text = $('#complaint').value;
+  const detected = detectSymptoms(text);
+  renderSymptomChips(detected);
+  const ids = [...new Set([...detected, ...pickedSymptoms])];
+  const { items, linked } = store.getState();
+  $('#emergency').textContent = EMERGENCY;
+  if (!ids.length) {
+    $('#adviceResult').innerHTML = text.trim()
+      ? '<p class="muted" style="text-align:center">Nicht erkannt. Tippe unten auf eine passende Beschwerde.</p>' : '';
+    return;
+  }
+  const results = adviseFor(ids, items, store.expiryStatus);
+  const linkedItems = linked.flatMap(h => h.items.map(i => ({ ...i, _hh: h.name })));
+  const linkedResults = adviseFor(ids, linkedItems, store.expiryStatus);
+  $('#adviceResult').innerHTML = `<p class="hint small">Dosierung immer nach Packungsbeilage. Bei Kindern, in der Schwangerschaft, mit Dauermedikamenten oder Vorerkrankungen zuerst in der Apotheke fragen.</p>`
+    + results.map((r, n) => {
+      const s = r.symptom;
+      const fromLinked = linkedResults[n].use.filter(h => !h.item.rx);
+      return `<div class="card advice">
+        <h2>${s.icon} ${esc(s.label)}</h2>
+        <div class="redflag"><strong>⚠️ Sofort ärztliche Hilfe oder 144 bei:</strong>${esc(s.red)}</div>
+        ${r.use.length ? `<h3>✅ Passt aus deinem Vorrat</h3>${r.use.map(h => recRow(h.item, h.st)).join('')}` : ''}
+        ${r.rx.length ? `<h3>℞ Rezeptpflichtig: nur verwenden, wenn für dich verschrieben</h3>${r.rx.map(h => recRow(h.item, h.st)).join('')}` : ''}
+        ${!r.use.length && !r.rx.length ? `<div class="none">Nichts Passendes im Haus. In der Apotheke nach ${esc(s.ask)} fragen.</div>` : ''}
+        ${!r.use.length && fromLinked.length ? `<h3>🏠 Bei verbundenen Haushalten</h3>${fromLinked.map(h => recRow(h.item, h.st, { linkedName: h.item._hh })).join('')}` : ''}
+        ${r.expired.length ? `<h3>🗑️ Abgelaufen, nicht mehr verwenden</h3>${r.expired.map(h => recRow(h.item, h.st, { expired: true })).join('')}<p class="muted small">Abgelaufene Medikamente in der Apotheke zurückgeben.</p>` : ''}
+        <p class="tip">💡 ${esc(s.tip)}</p>
+      </div>`;
+    }).join('');
+  $$('#adviceResult img[data-photo]').forEach(async img => {
+    const url = await photos.photoUrl(img.dataset.photo);
+    if (url) img.src = url; else img.replaceWith(Object.assign(document.createElement('span'), { className: 'thumb', textContent: '📦' }));
+  });
+}
+
+let helpTimer;
+$('#complaint').addEventListener('input', () => { clearTimeout(helpTimer); helpTimer = setTimeout(renderHelp, 250); });
+$('#symptomChips').addEventListener('click', e => {
+  if (e.target.closest('[data-more]')) { showAllSymptoms = !showAllSymptoms; return renderHelp(); }
+  const b = e.target.closest('[data-sym]');
+  if (!b) return;
+  const id = b.dataset.sym;
+  if (detectSymptoms($('#complaint').value).includes(id)) return; // kommt aus dem Text
+  pickedSymptoms.has(id) ? pickedSymptoms.delete(id) : pickedSymptoms.add(id);
+  renderHelp();
+});
+$('#adviceResult').addEventListener('click', e => {
+  const r = e.target.closest('[data-open]');
+  if (r) openItem(store.getState().items.find(i => i.id === r.dataset.open));
+});
+
 // ---------- Checkliste ----------
 function renderChecklist() {
   const items = store.getState().items.filter(i => store.expiryStatus(i).status !== 'expired');
@@ -985,11 +1066,13 @@ handleHash();
 
 // Bestehende Artikel: fehlende Standardanwendung einmalig ergänzen
 (async () => {
-  for (const it of store.getState().items.filter(i => !i.usage || looksFrench(i.usage))) {
-    let usage = '';
-    if (it.gtin && swissmedicInfo(it.gtin)) usage = (await lookupSwissDrug(it.gtin).catch(() => null))?.usage || '';
-    if (!usage) usage = FORM_USES[it.form] || '';
-    if (usage) store.upsertItem({ id: it.id, usage });
+  // auch ATC-Code (für „Beschwerden“) nachtragen
+  for (const it of store.getState().items.filter(i => !i.usage || looksFrench(i.usage) || (!i.atc && i.gtin && swissmedicInfo(i.gtin)))) {
+    const patch = { id: it.id };
+    const drug = it.gtin && swissmedicInfo(it.gtin) ? await lookupSwissDrug(it.gtin).catch(() => null) : null;
+    if (drug?.atc && !it.atc) patch.atc = drug.atc;
+    if (!it.usage || looksFrench(it.usage)) patch.usage = drug?.usage || FORM_USES[it.form] || '';
+    if (Object.keys(patch).length > 1 && (patch.atc || patch.usage)) store.upsertItem(patch);
   }
 })();
 
