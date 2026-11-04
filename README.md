@@ -10,7 +10,7 @@ Apoko ist eine Web-App (PWA) fürs Handy. Sie zeigt dir, welche Medikamente du z
   - Einmal erfasste Produkte merkt sich die App. Beim nächsten Scan derselben Packung sind Name, Wirkstoff, Form usw. schon ausgefüllt.
   - Ohne Kamera kann man den Code auch eintippen.
 - **Erfassen**: Name, Wirkstoff, Stärke, Darreichungsform, Packungsgrösse und Restmenge (Stück, ml, g, Dosen …), Ablauf- und Herstelldatum, Lagerort, Person, Charge, Notizen.
-- **Haltbarkeit nach Anbruch**: Für jede Darreichungsform gibt es einen Richtwert, z. B. Augentropfen 28 Tage. Die App zählt das frühere der beiden Daten (Verfalldatum oder Anbruch plus Haltbarkeit).
+- **Ablaufdatum** nur als Monat/Jahr (gilt bis Monatsende), per Live-Kamera, Foto oder DataMatrix-Code.
 - **Rezeptpflicht**: Schalter „Rezeptpflichtig“, dazu optional die Schweizer Abgabekategorie (A/B = Rezept, D/E = rezeptfrei).
 - **Übersicht und Filter**: abgelaufen / läuft bald ab (unter 90 Tagen) / rezeptpflichtig / rezeptfrei / geteilt / nicht geteilt, dazu eine Volltextsuche.
 - **Teilen mit anderen Haushalten**:
@@ -39,7 +39,7 @@ npm test             # Tests für den Strichcode-Parser
 | `index.html`, `css/styles.css` | Oberfläche |
 | `js/app.js` | UI-Logik |
 | `js/gs1.js` | Strichcode-Parser (GS1 DataMatrix, EAN, Swissmedic) |
-| `js/knowledge.js` | Medizinisches Wissen: Darreichungsformen, Haltbarkeit nach Anbruch, Abgabekategorien, Checkliste |
+| `js/knowledge.js` | Medizinisches Wissen: Darreichungsformen, Abgabekategorien, Checkliste |
 | `js/store.js` | Lokale Datenhaltung und Ablauf-Logik |
 | `js/share.js` | Teilen-Codes (komprimiert, als Link/QR) |
 | `js/scanner.js` | Kamera-Scanner (BarcodeDetector, sonst ZXing) |

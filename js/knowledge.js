@@ -1,7 +1,7 @@
 // Medizinisches Hintergrundwissen für die Hausapotheke.
 // Bewusst als Richtwerte formuliert: Massgebend ist immer die Packungsbeilage.
 
-/** Darreichungsformen mit passender Einheit und Haltbarkeit nach Anbruch (Tage). */
+/** Darreichungsformen mit passender Einheit (openDays: Richtwert Haltbarkeit nach Anbruch, nur als Info). */
 export const FORMS = [
   { id: 'tablette', label: 'Tabletten', unit: 'Stk', openDays: null },
   { id: 'kapsel', label: 'Kapseln', unit: 'Stk', openDays: null },
