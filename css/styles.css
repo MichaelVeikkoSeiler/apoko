@@ -247,3 +247,23 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .sheet-foot .btn { min-height: 52px; font-size: 1.05rem; font-weight: 600; }
 .head-spacer { width: 96px; }
 .field-invalid { outline: 2px solid var(--danger) !important; border-color: var(--danger) !important; }
+/* Standorte */
+.chips.wrap { flex-wrap: wrap; overflow: visible; padding: 0 0 4px; margin-top: -2px; }
+.chip.loc.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.searchrow { display: flex; gap: 8px; }
+.searchrow input { flex: 1 1 60%; min-width: 0; }
+.searchrow select { flex: 0 1 40%; min-width: 0; }
+.loclist { list-style: none; padding: 0; margin: 8px 0; }
+.loclist li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.loclist li:last-child { border-bottom: 0; }
+.loclist .locname { flex: 1; }
+.loclist .count { color: var(--muted); font-size: .85rem; }
+.loclist .btn { min-height: 36px; padding: 4px 10px; font-size: .85rem; }
+/* Artikelkarte: Bild links, Name/Standort/Status in der Mitte, Menge rechts */
+.item, .item.has-photo { grid-template-columns: 56px 1fr auto; align-items: center; gap: 0 12px; }
+.item .thumb { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--bg); grid-row: auto; }
+.item .thumb.ph { display: grid; place-items: center; font-size: 1.7rem; border: 1px solid var(--border); }
+.item .main { min-width: 0; }
+.item .main .badges { grid-column: auto; margin-top: 6px; }
+.item.has-photo .badges { grid-column: auto; }
+.item .right { align-self: start; }
