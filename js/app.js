@@ -118,11 +118,11 @@ function itemCard(item, { readonly = false, tag = 'li' } = {}) {
       ${thumb}
       <div class="main">
         <h3>${esc(item.name)}${item.strength && !item.name.toLowerCase().includes(item.strength.toLowerCase()) ? ` <span class="muted">${esc(item.strength)}</span>` : ''}</h3>
-        ${!readonly && (item.location || item.person) ? `<div class="meta">${esc([item.location && '📍 ' + item.location, item.person && '👤 ' + item.person].filter(Boolean).join('   '))}</div>` : ''}
         <div class="badges">
           <span class="badge ${st.status}" title="${st.eff ? 'bis ' + fmtMonth(st.eff.date) : ''}">${describeDays(st.days)}</span>
-          ${item.rx ? `<span class="badge rx">℞ Rezept${item.category ? ' · ' + esc(item.category) : ''}</span>` : ''}
-          ${!readonly && item.shared ? '<span class="badge shared">🔗 Geteilt</span>' : ''}
+          ${item.rx ? `<span class="badge rx">℞${item.category ? ' ' + esc(item.category) : ''}</span>` : ''}
+          ${!readonly && item.shared ? '<span class="badge shared">🔗</span>' : ''}
+          ${!readonly && (item.location || item.person) ? `<span class="loc">${esc([item.location && '📍 ' + item.location, item.person && '👤 ' + item.person].filter(Boolean).join('  '))}</span>` : ''}
         </div>
       </div>
       <div class="right">
