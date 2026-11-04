@@ -104,7 +104,7 @@ function amountText(item) {
   return `${fmtNum(item.remaining ?? item.quantity)} ${unit}`;
 }
 
-function itemCard(item, { readonly = false } = {}) {
+function itemCard(item, { readonly = false, tag = 'li' } = {}) {
   const st = store.expiryStatus(item);
   const form = formById(item.form);
   const pct = item.quantity > 0 && item.remaining != null ? Math.max(0, Math.min(100, item.remaining / item.quantity * 100)) : null;
@@ -114,7 +114,7 @@ function itemCard(item, { readonly = false } = {}) {
     : item.imageUrl ? `<img class="thumb" src="${esc(item.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
     : icon;
   return `
-    <li class="item ${st.status}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
+    <${tag} class="item ${st.status}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
       ${thumb}
       <div class="main">
         <h3>${esc(item.name)}${item.strength && !item.name.toLowerCase().includes(item.strength.toLowerCase()) ? ` <span class="muted">${esc(item.strength)}</span>` : ''}</h3>
@@ -129,7 +129,7 @@ function itemCard(item, { readonly = false } = {}) {
         <div>${esc(amountText(item))}</div>
         ${pct != null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}
       </div>
-    </li>`;
+    </${tag}>`;
 }
 
 function renderInventory() {
@@ -158,7 +158,11 @@ function renderInventory() {
     .filter(x => passFilter(x.i, x.st) && passLocation(x.i) && matches(x.i, query))
     .sort((a, b) => order[a.st.status] - order[b.st.status] || (a.st.days ?? 1e9) - (b.st.days ?? 1e9) || a.i.name.localeCompare(b.i.name));
 
-  $('#itemList').innerHTML = list.map(x => itemCard(x.i)).join('') ||
+  // Jede Zeile: roter Löschen-Knopf hinten, Karte darüber (nach links wischen zeigt den Knopf)
+  $('#itemList').innerHTML = list.map(x => `<li class="swipe-row">
+      <button type="button" class="swipe-del" data-del="${esc(x.i.id)}" tabindex="-1">🗑️<span>Löschen</span></button>
+      ${itemCard(x.i, { tag: 'div' })}
+    </li>`).join('') ||
     (items.length ? '<p class="muted" style="text-align:center">Keine Treffer für diesen Filter.</p>' : '');
   $('#emptyState').hidden = items.length > 0;
   $$('#itemList img[data-photo]').forEach(async img => {
@@ -173,9 +177,71 @@ function setFilter(f) { filter = f; renderInventory(); }
 $('#filters').addEventListener('click', e => { const b = e.target.closest('[data-filter]'); if (b) setFilter(b.dataset.filter); });
 $('#stats').addEventListener('click', e => { const b = e.target.closest('[data-filter]'); if (b) setFilter(b.dataset.filter); });
 $('#search').addEventListener('input', e => { query = e.target.value.trim(); renderInventory(); });
+// ---- Nach links wischen zum Löschen ----
+const SWIPE_OPEN = -104;
+let swipe = null;      // laufende Geste
+let openCard = null;   // aktuell aufgeschobene Karte
+let suppressClick = false;
+
+function setOffset(card, x, animate) {
+  card.style.transition = animate ? 'transform .2s ease' : 'none';
+  card.style.transform = x ? `translateX(${x}px)` : '';
+  card.closest('.swipe-row')?.classList.toggle('revealed', x < 0);
+}
+function closeOpenCard() {
+  if (openCard) setOffset(openCard, 0, true);
+  openCard = null;
+}
+
+$('#itemList').addEventListener('pointerdown', e => {
+  const card = e.target.closest('.swipe-row > .item');
+  if (!card || e.button > 0) return;
+  if (openCard && openCard !== card) closeOpenCard();
+  swipe = { card, x0: e.clientX, y0: e.clientY, base: card === openCard ? SWIPE_OPEN : 0, dx: 0, active: false, id: e.pointerId };
+});
+$('#itemList').addEventListener('pointermove', e => {
+  if (!swipe || e.pointerId !== swipe.id) return;
+  const dx = e.clientX - swipe.x0, dy = e.clientY - swipe.y0;
+  if (!swipe.active) {
+    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { swipe = null; return; } // senkrecht = scrollen
+    if (Math.abs(dx) < 10) return;
+    swipe.active = true;
+    swipe.card.setPointerCapture(e.pointerId);
+  }
+  swipe.dx = dx;
+  setOffset(swipe.card, Math.max(SWIPE_OPEN - 30, Math.min(0, swipe.base + dx)), false);
+});
+function endSwipe(e) {
+  if (!swipe || e.pointerId !== swipe.id) return;
+  const { card, active, base, dx } = swipe;
+  swipe = null;
+  if (!active) return;
+  suppressClick = true;
+  setTimeout(() => { suppressClick = false; }, 50);
+  if (base + dx < SWIPE_OPEN / 2) { setOffset(card, SWIPE_OPEN, true); openCard = card; }
+  else { setOffset(card, 0, true); if (openCard === card) openCard = null; }
+}
+$('#itemList').addEventListener('pointerup', endSwipe);
+$('#itemList').addEventListener('pointercancel', endSwipe);
+
 $('#itemList').addEventListener('click', e => {
+  if (suppressClick) return;
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    const item = store.getState().items.find(i => i.id === del.dataset.del);
+    if (item && confirm(`„${item.name}“ wirklich löschen?`)) {
+      photos.deletePhoto(item.id);
+      openCard = null;
+      store.deleteItem(item.id);
+      toast('Gelöscht');
+    } else closeOpenCard();
+    return;
+  }
   const li = e.target.closest('.item[data-id]');
-  if (li) openItem(store.getState().items.find(i => i.id === li.dataset.id));
+  if (!li) return;
+  // Ist eine Karte aufgeschoben, schliesst ein Tippen sie zuerst
+  if (openCard) return closeOpenCard();
+  openItem(store.getState().items.find(i => i.id === li.dataset.id));
 });
 $('#itemList').addEventListener('keydown', e => {
   if (e.key === 'Enter') e.target.closest('.item[data-id]')?.click();
