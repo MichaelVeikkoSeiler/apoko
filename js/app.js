@@ -1,12 +1,11 @@
 import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
 import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, FORM_USES, formById } from './knowledge.js';
 import * as store from './store.js';
-import { startScanner, decodeImage, startCamera, grabFrameRegion } from './scanner.js';
+import { startScanner, decodeImage } from './scanner.js';
 import { lookupSwissDrug, searchByText, guessForm } from './drugdb.js';
 import { lookupOpenProduct } from './productdb.js';
 import * as photos from './photos.js';
-import { recognizeText, preloadOcr } from './ocr.js';
-import { parseExpiryText } from './dates.js';
+import { recognizeText } from './ocr.js';
 import { buildShareCode, shareLink, parseShareCode, sharedItems } from './share.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -110,8 +109,8 @@ function itemCard(item, { readonly = false, tag = 'li' } = {}) {
   const pct = item.quantity > 0 && item.remaining != null ? Math.max(0, Math.min(100, item.remaining / item.quantity * 100)) : null;
   const icon = `<span class="thumb ph" aria-hidden="true">${FORM_ICON[form.id] || '📦'}</span>`;
   const thumb = readonly ? icon
-    : item.hasPhoto ? `<img class="thumb" data-photo="${esc(item.id)}" alt="">`
     : item.imageUrl ? `<img class="thumb" src="${esc(item.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+    : photoKeys(item)[0] ? `<img class="thumb" data-photo="${esc(photoKeys(item)[0])}" alt="">`
     : icon;
   return `
     <${tag} class="item ${st.status}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
@@ -230,7 +229,7 @@ $('#itemList').addEventListener('click', e => {
   if (del) {
     const item = store.getState().items.find(i => i.id === del.dataset.del);
     if (item && confirm(`„${item.name}“ wirklich löschen?`)) {
-      photos.deletePhoto(item.id);
+      photoKeys(item).forEach(k => photos.deletePhoto(k));
       openCard = null;
       store.deleteItem(item.id);
       toast('Gelöscht');
@@ -241,6 +240,10 @@ $('#itemList').addEventListener('click', e => {
   if (!li) return;
   // Ist eine Karte aufgeschoben, schliesst ein Tippen sie zuerst
   if (openCard) return closeOpenCard();
+  if (e.target.closest('img.thumb')) {
+    const it = store.getState().items.find(i => i.id === li.dataset.id);
+    return openViewer(itemImageSources(it), 0);
+  }
   openItem(store.getState().items.find(i => i.id === li.dataset.id));
 });
 $('#itemList').addEventListener('keydown', e => {
@@ -369,52 +372,94 @@ function autoFormFromName() {
 }
 F.name.addEventListener('change', autoFormFromName);
 
-// undefined = unverändert, null = entfernen, Blob = neues Foto
-let pendingPhoto;
-
-const SOURCE_DEFAULT = 'Produktbild: wird automatisch geladen, wenn ein offizielles freies Foto existiert.';
-
-function showPhoto(url, source = '') {
-  $('#photoImg').hidden = !url;
-  $('#photoEmpty').hidden = !!url;
-  if (url) $('#photoImg').src = url; else $('#photoImg').removeAttribute('src');
-  $('#btnPhotoRemove').hidden = !url;
-  $('#photoSource').textContent = url ? source : SOURCE_DEFAULT;
+// ---------- Fotos eines Artikels (Galerie) ----------
+// Eigene Fotos liegen in IndexedDB; item.photos = Liste der Schlüssel (das erste ist das Frontbild).
+// Ältere Artikel hatten ein einzelnes Foto unter der Artikel-ID.
+function photoKeys(item) {
+  if (!item) return [];
+  if (Array.isArray(item.photos)) return item.photos;
+  return item.hasPhoto ? [item.id] : [];
 }
 
-/** Zeigt das passende Bild: eigenes Foto vor offiziellem Bild. */
-function refreshPhoto(ownUrl) {
-  if (ownUrl) return showPhoto(ownUrl, 'Eigenes Foto');
-  if (F.imageUrl.value) return showPhoto(F.imageUrl.value, `Bild: ${F.imageUrl.dataset.source || 'Open Products Facts'} (CC BY-SA)`);
-  showPhoto(null);
+/** Alle Bilder eines Artikels für die Bildansicht: offizielles Frontbild zuerst. */
+function itemImageSources(item) {
+  const list = [];
+  if (item.imageUrl) list.push({ src: item.imageUrl });
+  for (const k of photoKeys(item)) list.push({ key: k });
+  return list;
 }
 
-function setPendingPhoto(blob) {
-  pendingPhoto = blob;
-  refreshPhoto(blob ? URL.createObjectURL(blob) : null);
+let gallery = [];        // { key?, blob?, url }
+let removedKeys = [];
+
+function renderGallery() {
+  const tiles = [];
+  if (F.imageUrl.value) tiles.push({ url: F.imageUrl.value, official: true });
+  gallery.forEach((g, i) => tiles.push({ url: g.url, idx: i }));
+  $('#gallery').innerHTML = tiles.map((t, n) => `
+    <div class="gtile">
+      <button type="button" class="gimg" data-view="${n}"><img src="${esc(t.url || '')}" alt="" referrerpolicy="no-referrer"></button>
+      ${n === 0 ? '<span class="gbadge">Front</span>' : '<span class="gbadge info">nur Info</span>'}
+      ${t.official ? '<span class="gbadge src">offiziell</span>' : ''}
+      <button type="button" class="gdel" ${t.official ? 'data-del-official' : `data-del-photo="${t.idx}"`} aria-label="Bild entfernen">✕</button>
+    </div>`).join('') + `
+    <label class="gtile gadd" aria-label="Foto hinzufügen">＋<span>Foto</span>
+      <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+    </label>`;
+  $('#photoHint').hidden = tiles.length > 0;
+  if (F.imageUrl.value) $('#photoSource').textContent = `Frontbild: ${F.imageUrl.dataset.source || 'Open Products Facts'} (CC BY-SA)`;
+  $('#photoSource').hidden = !F.imageUrl.value;
+  // Eigene Fotos asynchron laden
+  gallery.forEach((g, i) => {
+    if (g.url || !g.key) return;
+    photos.photoUrl(g.key).then(url => {
+      g.url = url;
+      const img = $(`#gallery [data-view="${i + (F.imageUrl.value ? 1 : 0)}"] img`);
+      if (img && url) img.src = url;
+    });
+  });
 }
 
-$('#photoInput').addEventListener('change', async e => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  try { setPendingPhoto(await photos.resizeImage(file)); }
-  catch { toast('Foto konnte nicht gelesen werden.'); }
+$('#gallery').addEventListener('change', e => {
+  if (e.target.id === 'photoInput') addPhoto(e.target.files[0]);
 });
-$('#btnPhotoRemove').addEventListener('click', () => {
-  // Erst das eigene Foto entfernen; ist keins da, das offizielle Bild
-  if ($('#photoSource').textContent === 'Eigenes Foto') setPendingPhoto(null);
-  else { F.imageUrl.value = ''; refreshPhoto(null); }
+
+/** Foto ablegen (das erste ist das Frontbild) und gleich auslesen. */
+async function addPhoto(file) {
+  if (!file) return;
+  try {
+    const blob = await photos.resizeImage(file, 1400, 0.85);
+    gallery.push({ blob, url: URL.createObjectURL(blob) });
+    renderGallery();
+    await analyzePhoto(file);
+  } catch { toast('Foto konnte nicht gelesen werden.'); }
+}
+$('#gallery').addEventListener('click', e => {
+  const del = e.target.closest('[data-del-photo]');
+  if (del) {
+    const [g] = gallery.splice(+del.dataset.delPhoto, 1);
+    if (g?.key) removedKeys.push(g.key);
+    return renderGallery();
+  }
+  if (e.target.closest('[data-del-official]')) { F.imageUrl.value = ''; return renderGallery(); }
+  const v = e.target.closest('[data-view]');
+  if (v) {
+    const list = [];
+    if (F.imageUrl.value) list.push({ src: F.imageUrl.value });
+    gallery.forEach(g => list.push({ src: g.url, key: g.key }));
+    openViewer(list, +v.dataset.view);
+  }
 });
 
 function openItem(item) {
   form.reset();
   $$('.field-invalid', form).forEach(el => el.classList.remove('field-invalid'));
   $('#scanInfo').hidden = true;
+  $('#scanInfo').textContent = '';
   $('#suggestions').hidden = true;
-  pendingPhoto = undefined;
   formTouched = !!item;
-  const ownPhoto = item?.hasPhoto ? photos.photoUrl(item.id) : null;
+  gallery = photoKeys(item).map(key => ({ key, url: '' }));
+  removedKeys = [];
   const isNew = !item;
   item ||= { form: 'tablette', unit: 'Stk', shared: false, rx: false };
   $('#itemDialogTitle').textContent = isNew ? 'Artikel erfassen' : 'Artikel bearbeiten';
@@ -427,10 +472,7 @@ function openItem(item) {
     else el.value = v ?? '';
   }
   delete F.imageUrl.dataset.source;
-  refreshPhoto(null);
-  ownPhoto?.then(url => { if (pendingPhoto === undefined && url) refreshPhoto(url); });
-  $('#expiryInfo').hidden = true;
-  $('#btnExpiryPhoto').classList.remove('attention');
+  renderGallery();
   fillDatalists();
   updateFormHint();
   updateRxWarn();
@@ -483,13 +525,20 @@ form.addEventListener('submit', async e => {
   if (item.remaining != null && item.quantity != null && item.remaining > item.quantity)
     return toast('„Noch vorhanden“ ist grösser als die Packungsgrösse.');
   if (item.rx && item.shared && !confirm(NOTES.rxShare + '\n\nTrotzdem teilen?')) return;
-  if (pendingPhoto instanceof Blob) {
-    try { await photos.savePhoto(item.id, pendingPhoto); item.hasPhoto = true; }
+  // Nur ein Bild pro Artikel: das offizielle Frontbild, sonst das erste eigene Foto.
+  // Weitere Fotos dienen nur dem Auslesen und werden verworfen.
+  const keys = [];
+  const front = item.imageUrl ? null : gallery[0];
+  const discard = gallery.filter(g => g !== front && g.key).map(g => g.key);
+  if (front?.key) keys.push(front.key);
+  else if (front?.blob) {
+    const key = `${item.id}:${store.uid()}`;
+    try { await photos.savePhoto(key, front.blob); keys.push(key); }
     catch { toast('Foto konnte nicht gespeichert werden.'); }
-  } else if (pendingPhoto === null) {
-    await photos.deletePhoto(item.id);
-    item.hasPhoto = false;
   }
+  for (const k of [...removedKeys, ...discard]) await photos.deletePhoto(k);
+  item.photos = keys;
+  item.hasPhoto = keys.length > 0;
   store.upsertItem(item);
   dlg.close();
   toast(isNew ? 'Erfasst' : 'Gespeichert');
@@ -497,7 +546,8 @@ form.addEventListener('submit', async e => {
 $('[data-close]', dlg).addEventListener('click', () => dlg.close());
 $('#btnDelete').addEventListener('click', () => {
   if (!confirm(`„${F.name.value}“ löschen?`)) return;
-  photos.deletePhoto(F.id.value);
+  const old = store.getState().items.find(i => i.id === F.id.value);
+  photoKeys(old).forEach(k => photos.deletePhoto(k));
   store.deleteItem(F.id.value);
   dlg.close();
   toast('Gelöscht');
@@ -505,7 +555,7 @@ $('#btnDelete').addEventListener('click', () => {
 // „+ Erfassen“ öffnet direkt die Kamera für den Strichcode; Schliessen führt ins Formular
 $('#fab').addEventListener('click', () => {
   openItem(null);
-  openScanner(applyScan, 'Am besten den quadratischen DataMatrix-Code scannen, er enthält auch das Ablaufdatum.');
+  openScanner(applyScan, 'Strichcode in den Rahmen halten.');
 });
 
 async function applyScan(raw) {
@@ -529,7 +579,7 @@ async function applyScan(raw) {
     const sm = swissmedicInfo(r.gtin);
     if (known) {
       fill(known);
-      if (known.imageUrl && !(pendingPhoto instanceof Blob)) refreshPhoto(null);
+      if (known.imageUrl) renderGallery();
       info.push('Produkt bekannt, Angaben übernommen');
     } else if (sm) {
       $('#scanInfo').hidden = false;
@@ -554,7 +604,7 @@ async function applyScan(raw) {
         if (prod.imageUrl) {
           F.imageUrl.value = prod.imageUrl;
           F.imageUrl.dataset.source = prod.source;
-          if (!(pendingPhoto instanceof Blob)) refreshPhoto(null);
+          renderGallery();
         }
         info.push(`Gefunden in ${prod.source}, bitte kontrollieren`);
       } else {
@@ -563,83 +613,20 @@ async function applyScan(raw) {
     }
   }
   if (r.pzn) info.push(`PZN ${r.pzn}`);
-  if (r.expiry) { setMonth(F.expiry, r.expiry); info.push(`Ablauf ${fmtMonth(r.expiry)}`); }
   if (r.batch) F.batch.value = r.batch;
   if (r.count && !F.quantity.value) F.quantity.value = r.count;
 
-  if (!r.expiry && !F.expiry.value) {
-    info.push('Ablaufdatum steht nicht im Strichcode: unten „📷 Ablaufdatum scannen“ antippen oder eingeben');
-    $('#btnExpiryPhoto').classList.add('attention');
-  }
   $('#scanInfo').hidden = false;
   $('#scanInfo').textContent = '✓ ' + info.join(' · ');
   updateFormHint(); updateRxWarn();
   if (!F.name.value) F.name.focus();
 }
 
-// ---------- Ablaufdatum per Foto ----------
-$('#btnExpiryPhoto').addEventListener('click', () => openDateScanner());
-
-/** Ausschnitte eines Bildes als Canvas (Etikett ist im Foto oft klein, Hintergrund stört). */
-async function* imageTiles(blob) {
-  const img = await createImageBitmap(blob);
-  const tw = img.width * 0.7, th = img.height * 0.32;
-  const xs = [0.5, 0, 1], ys = [0.5, 0.3, 0.7, 0.1, 0.9, 0, 1];
-  for (const fy of ys) for (const fx of xs) {
-    const c = document.createElement('canvas');
-    const scale = Math.min(2, 1400 / tw);
-    c.width = Math.round(tw * scale); c.height = Math.round(th * scale);
-    const ctx = c.getContext('2d');
-    ctx.filter = 'grayscale(1) contrast(1.4)';
-    ctx.drawImage(img, (img.width - tw) * fx, (img.height - th) * fy, tw, th, 0, 0, c.width, c.height);
-    yield c;
-  }
-}
-
-$('#expiryInput').addEventListener('change', async e => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  const info = $('#expiryInfo');
-  info.hidden = false;
-  info.className = 'scaninfo';
-  info.textContent = 'Foto wird gelesen …';
-  try {
-    const big = await photos.resizeImage(file, 1800, 0.9);
-    // Steht ein DataMatrix-Code mit drauf, ist der am zuverlässigsten
-    const code = await decodeImage(big).catch(() => null);
-    const parsed = code ? parseBarcode(code) : null;
-    if (parsed?.expiry) return setExpiryFromScan(parsed, 'DataMatrix-Code');
-    const progress = m => { if (/load|initializ/.test(m.status)) info.textContent = 'Texterkennung wird vorbereitet (nur beim ersten Mal) …'; };
-    // Ganzes Bild, dann Ausschnitte. Die Charge wird aus Text nicht übernommen (Punktdruck oft falsch gelesen).
-    let found = parseExpiryText(await recognizeText(big, progress, { sparse: true }));
-    let n = 0;
-    if (!found.expiry) {
-      for await (const tile of imageTiles(big)) {
-        info.textContent = `Datum wird gesucht … (${++n}/21)`;
-        found = parseExpiryText(await recognizeText(tile, progress, { sparse: true }));
-        if (found.expiry) break;
-      }
-    }
-    if (!found.expiry) {
-      info.className = 'warn';
-      info.textContent = 'Kein Datum gefunden. Tipp: „Ablaufdatum scannen“ verwenden und das Datum in den Rahmen halten, oder Monat/Jahr eingeben. Eingeprägte Daten (ohne Farbe) sind kaum lesbar.';
-      return;
-    }
-    setExpiryFromScan({ expiry: found.expiry }, 'Foto');
-  } catch (err) {
-    info.className = 'warn';
-    info.textContent = 'Lesen fehlgeschlagen: ' + err.message;
-  }
-});
-
 // ---------- Erkennen ohne Packung (Foto + Texterkennung) ----------
-$('#btnRecognize').addEventListener('click', () => $('#recognizeInput').click());
+$('#btnRecognize').addEventListener('click', () => $('#photoInput').click());
 
-$('#recognizeInput').addEventListener('change', async e => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
+/** Liest ein Foto aus: zuerst Strichcode/DataMatrix, sonst (falls noch kein Name) den aufgedruckten Text. */
+async function analyzePhoto(file) {
   const info = $('#scanInfo');
   $('#suggestions').hidden = true;
   info.hidden = false;
@@ -653,6 +640,7 @@ $('#recognizeInput').addEventListener('change', async e => {
       await applyScan(code);
       return;
     }
+    if (F.name.value.trim()) { info.hidden = true; return; } // Name schon bekannt: nichts weiter nötig
     // 2. Sonst den aufgedruckten Text lesen
     const text = await recognizeText(big, m => {
       if (m.status === 'recognizing text') info.textContent = `Text wird erkannt … ${Math.round(m.progress * 100)} %`;
@@ -663,7 +651,7 @@ $('#recognizeInput').addEventListener('change', async e => {
   } catch (err) {
     info.textContent = 'Erkennung fehlgeschlagen: ' + err.message;
   }
-});
+}
 
 const TABLET_NOTE = '<p>⚠️ Lose Tabletten ohne Aufdruck lassen sich nicht sicher erkennen. Nimm nichts ein, was du nicht eindeutig zuordnen kannst. Im Zweifel in der Apotheke nachfragen.</p>';
 
@@ -716,22 +704,102 @@ function renderSuggestions(hits, text) {
   };
 }
 
+// ---------- Bildansicht (vergrössern) ----------
+const viewer = $('#viewer');
+const vImg = $('#viewerImg');
+let vList = [], vIndex = 0;
+let vScale = 1, vX = 0, vY = 0;
+const vPointers = new Map();
+let vGesture = null, vLastTap = 0;
+
+function vApply(animate = false) {
+  vImg.style.transition = animate ? 'transform .2s ease' : 'none';
+  vImg.style.transform = `translate(${vX}px, ${vY}px) scale(${vScale})`;
+}
+function vReset(animate) { vScale = 1; vX = 0; vY = 0; vApply(animate); }
+
+async function vShow(i) {
+  if (!vList.length) return;
+  vIndex = (i + vList.length) % vList.length;
+  const it = vList[vIndex];
+  vImg.src = it.src || (it.key ? await photos.photoUrl(it.key) : '') || '';
+  vReset();
+  $('#viewerCount').textContent = vList.length > 1 ? `${vIndex + 1} / ${vList.length}` : '';
+  $('#viewerPrev').hidden = $('#viewerNext').hidden = vList.length < 2;
+}
+
+function openViewer(list, index = 0) {
+  vList = list.filter(x => x.src || x.key);
+  if (!vList.length) return;
+  viewer.showModal();
+  vShow(index);
+}
+$('#viewerClose').addEventListener('click', () => viewer.close());
+$('#viewerPrev').addEventListener('click', () => vShow(vIndex - 1));
+$('#viewerNext').addEventListener('click', () => vShow(vIndex + 1));
+
+const stage = $('#viewerStage');
+const vDist = () => { const [a, b] = [...vPointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+stage.addEventListener('pointerdown', e => {
+  stage.setPointerCapture(e.pointerId);
+  vPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (vPointers.size === 2) vGesture = { type: 'pinch', d0: vDist(), s0: vScale };
+  else if (vPointers.size === 1) vGesture = { type: 'pan', x0: e.clientX, y0: e.clientY, tx: vX, ty: vY, moved: false };
+});
+stage.addEventListener('pointermove', e => {
+  if (!vPointers.has(e.pointerId)) return;
+  vPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (vGesture?.type === 'pinch' && vPointers.size === 2) {
+    vScale = Math.min(6, Math.max(1, vGesture.s0 * vDist() / vGesture.d0));
+    if (vScale === 1) { vX = 0; vY = 0; }
+    vApply();
+  } else if (vGesture?.type === 'pan') {
+    const dx = e.clientX - vGesture.x0, dy = e.clientY - vGesture.y0;
+    if (Math.abs(dx) + Math.abs(dy) > 6) vGesture.moved = true;
+    if (vScale > 1) { vX = vGesture.tx + dx; vY = vGesture.ty + dy; vApply(); }
+  }
+});
+function vEnd(e) {
+  if (!vPointers.has(e.pointerId)) return;
+  vPointers.delete(e.pointerId);
+  if (vGesture?.type === 'pan' && vPointers.size === 0) {
+    const dx = e.clientX - vGesture.x0;
+    if (!vGesture.moved) {
+      // Doppeltippen: vergrössern / zurück
+      const now = Date.now();
+      if (now - vLastTap < 300) {
+        if (vScale > 1) vReset(true);
+        else {
+          const r = stage.getBoundingClientRect();
+          vScale = 2.5;
+          vX = (r.width / 2 - (e.clientX - r.left)) * 1.5;
+          vY = (r.height / 2 - (e.clientY - r.top)) * 1.5;
+          vApply(true);
+        }
+        vLastTap = 0;
+      } else vLastTap = now;
+    } else if (vScale === 1 && Math.abs(dx) > 60) vShow(vIndex + (dx < 0 ? 1 : -1)); // wischen
+  }
+  if (vPointers.size === 1) { // von zwei auf einen Finger: weiter verschieben
+    const [p] = [...vPointers.values()];
+    vGesture = { type: 'pan', x0: p.x, y0: p.y, tx: vX, ty: vY, moved: true };
+  } else if (!vPointers.size) vGesture = null;
+}
+stage.addEventListener('pointerup', vEnd);
+stage.addEventListener('pointercancel', vEnd);
+stage.addEventListener('wheel', e => { // Maus/Trackpad
+  e.preventDefault();
+  vScale = Math.min(6, Math.max(1, vScale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+  if (vScale === 1) { vX = 0; vY = 0; }
+  vApply();
+}, { passive: false });
+
 // ---------- Scanner ----------
 const scanDlg = $('#scanDialog');
 let stopScan = null;
 let scanHandler = null;
 
-let scanMode = 'code'; // 'code' = Strichcode/QR, 'date' = Ablaufdatum lesen
-
-function setScanMode(mode) {
-  scanMode = mode;
-  scanDlg.classList.toggle('date-mode', mode === 'date');
-  $('#manualRow').hidden = mode === 'date';
-  $('#btnScanPhoto').textContent = mode === 'date' ? '📷 Stattdessen Foto wählen' : '📷 Stattdessen Foto aufnehmen';
-}
-
 async function openScanner(handler, hint) {
-  setScanMode('code');
   scanHandler = handler;
   $('#manualCode').value = '';
   $('#scanStatus').textContent = 'Kamera wird gestartet …';
@@ -753,61 +821,10 @@ function closeScanner() {
 scanDlg.addEventListener('close', () => { stopScan?.(); stopScan = null; });
 $('#btnScanClose').addEventListener('click', closeScanner);
 $('#btnScanPhoto').addEventListener('click', () => {
-  const input = scanMode === 'date' ? '#expiryInput' : '#recognizeInput';
   closeScanner();
-  $(input).click();
+  $('#photoInput').click();
 });
 
-// Datumskamera: liest laufend nur den Rahmen-Ausschnitt, bis zweimal dasselbe Datum erkannt wurde
-async function openDateScanner() {
-  setScanMode('date');
-  $('#btnScanPhoto').hidden = false;
-  const status = $('#scanStatus');
-  status.textContent = 'Kamera wird gestartet …';
-  scanDlg.showModal();
-  $('#btnScanClose').focus();
-  let alive = true;
-  let stopCam;
-  try {
-    stopCam = await startCamera($('#scanVideo'));
-  } catch (e) {
-    status.textContent = (e.name === 'NotAllowedError' ? 'Kein Kamerazugriff erlaubt.' : e.message) + ' Du kannst stattdessen ein Foto wählen.';
-    return;
-  }
-  stopScan = () => { alive = false; stopCam(); };
-  if (!scanDlg.open) return stopScan();
-  status.textContent = 'Texterkennung wird vorbereitet …';
-  await preloadOcr().catch(() => {});
-  status.textContent = 'Ablaufdatum in den Rahmen halten, möglichst nah und gerade.';
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-  let last = null;
-  while (alive) {
-    const canvas = grabFrameRegion($('#scanVideo'), $('#scanFrame'));
-    if (!canvas) { await sleep(200); continue; }
-    let found = {};
-    try { found = parseExpiryText(await recognizeText(canvas, null, { sparse: true })); } catch { /* weiter */ }
-    if (!alive) return;
-    if (found.expiry && found.expiry === last) {
-      closeScanner();
-      setExpiryFromScan({ expiry: found.expiry }, 'Kamera');
-      return;
-    }
-    if (found.expiry) status.textContent = `Gelesen: ${fmtMonth(found.expiry)}. Bitte kurz ruhig halten …`;
-    else if (last) status.textContent = 'Ablaufdatum in den Rahmen halten, möglichst nah und gerade.';
-    last = found.expiry || null;
-    await sleep(150);
-  }
-}
-
-function setExpiryFromScan(found, via) {
-  const info = $('#expiryInfo');
-  info.hidden = false;
-  info.className = 'scaninfo';
-  setMonth(F.expiry, found.expiry);
-  const parts = [`Ablauf ${fmtMonth(found.expiry)}`];
-  $('#btnExpiryPhoto').classList.remove('attention');
-  info.textContent = `✓ ${parts.join(' · ')} (${via}). Bitte kurz mit der Packung vergleichen.`;
-}
 $('#btnManual').addEventListener('click', () => {
   const v = $('#manualCode').value.trim();
   if (!v) return;

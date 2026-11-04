@@ -46,6 +46,8 @@ jobs:
           pip install openpyxl
           mkdir -p data
           python scripts/build_swissmedic.py --download data/swissmedic.json
+        env:
+          SAMPLE: "Iberogast|Dafalgan 500|Merfen"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
