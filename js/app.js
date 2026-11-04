@@ -1,5 +1,5 @@
 import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
-import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, FORM_USES, formById } from './knowledge.js';
+import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, FORM_USES, looksFrench, formById } from './knowledge.js';
 import * as store from './store.js';
 import { startScanner, decodeImage } from './scanner.js';
 import { lookupSwissDrug, searchByText, guessForm } from './drugdb.js';
@@ -985,7 +985,7 @@ handleHash();
 
 // Bestehende Artikel: fehlende Standardanwendung einmalig ergänzen
 (async () => {
-  for (const it of store.getState().items.filter(i => !i.usage)) {
+  for (const it of store.getState().items.filter(i => !i.usage || looksFrench(i.usage))) {
     let usage = '';
     if (it.gtin && swissmedicInfo(it.gtin)) usage = (await lookupSwissDrug(it.gtin).catch(() => null))?.usage || '';
     if (!usage) usage = FORM_USES[it.form] || '';

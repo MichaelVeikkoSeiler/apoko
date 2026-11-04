@@ -228,3 +228,28 @@ export function useFromAtc(atc) {
 export const FORM_USES = {
   pflaster: 'Zum Abdecken und Schützen kleiner Wunden',
 };
+
+/** Grobe Einordnung nach dem ersten Buchstaben des ATC-Codes (letzter Ausweg). */
+export const ATC_GROUPS = {
+  A: 'Für Magen, Darm und Stoffwechsel',
+  B: 'Für das Blut',
+  C: 'Für Herz und Kreislauf',
+  D: 'Für die Haut',
+  G: 'Für Blase, Harnwege und Intimbereich',
+  H: 'Hormone',
+  J: 'Gegen Infektionen',
+  L: 'Für das Immunsystem bzw. gegen Krebs',
+  M: 'Für Muskeln, Gelenke und Knochen',
+  N: 'Für das Nervensystem',
+  P: 'Gegen Parasiten',
+  R: 'Für die Atemwege',
+  S: 'Für Augen und Ohren',
+  V: 'Verschiedenes',
+};
+
+/** true, wenn ein Text eher französisch als deutsch aussieht (Swissmedic-Liste ist gemischt). */
+export function looksFrench(text) {
+  const t = String(text || '');
+  if (/[äöüß]/i.test(t)) return false;
+  return /[éèêàçùâî]|\b(des|du|pour|les|la|le|et|en|peau|plaies|douleurs|traitement|soigner)\b/i.test(t);
+}
