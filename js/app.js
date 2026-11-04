@@ -6,6 +6,7 @@ import { lookupSwissDrug, searchByText, guessForm } from './drugdb.js';
 import { lookupOpenProduct } from './productdb.js';
 import * as photos from './photos.js';
 import { recognizeText } from './ocr.js';
+import { parseExpiryText } from './dates.js';
 import { buildShareCode, shareLink, parseShareCode, sharedItems } from './share.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -78,8 +79,9 @@ function itemCard(item, { readonly = false } = {}) {
   const form = formById(item.form);
   const pct = item.quantity > 0 && item.remaining != null ? Math.max(0, Math.min(100, item.remaining / item.quantity * 100)) : null;
   return `
-    <li class="item ${st.status}${!readonly && item.hasPhoto ? ' has-photo' : ''}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
-      ${!readonly && item.hasPhoto ? `<img class="thumb" data-photo="${esc(item.id)}" alt="">` : ''}
+    <li class="item ${st.status}${!readonly && (item.hasPhoto || item.imageUrl) ? ' has-photo' : ''}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
+      ${readonly ? '' : item.hasPhoto ? `<img class="thumb" data-photo="${esc(item.id)}" alt="">`
+        : item.imageUrl ? `<img class="thumb" src="${esc(item.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}
       <div>
         <h3>${esc(item.name)}${item.strength && !item.name.toLowerCase().includes(item.strength.toLowerCase()) ?` <span class="muted">${esc(item.strength)}</span>` : ''}</h3>
         <div class="meta">${esc([item.substance, form.label].filter(Boolean).join(' · '))}</div>
@@ -221,16 +223,26 @@ $('#btnMonthEnd').addEventListener('click', () => {
 // undefined = unverändert, null = entfernen, Blob = neues Foto
 let pendingPhoto;
 
-function showPhoto(url) {
+const SOURCE_DEFAULT = 'Produktbild: wird automatisch geladen, wenn ein offizielles freies Foto existiert.';
+
+function showPhoto(url, source = '') {
   $('#photoImg').hidden = !url;
   $('#photoEmpty').hidden = !!url;
   if (url) $('#photoImg').src = url; else $('#photoImg').removeAttribute('src');
   $('#btnPhotoRemove').hidden = !url;
+  $('#photoSource').textContent = url ? source : SOURCE_DEFAULT;
+}
+
+/** Zeigt das passende Bild: eigenes Foto vor offiziellem Bild. */
+function refreshPhoto(ownUrl) {
+  if (ownUrl) return showPhoto(ownUrl, 'Eigenes Foto');
+  if (F.imageUrl.value) return showPhoto(F.imageUrl.value, `Bild: ${F.imageUrl.dataset.source || 'Open Products Facts'} (CC BY-SA)`);
+  showPhoto(null);
 }
 
 function setPendingPhoto(blob) {
   pendingPhoto = blob;
-  showPhoto(blob ? URL.createObjectURL(blob) : null);
+  refreshPhoto(blob ? URL.createObjectURL(blob) : null);
 }
 
 $('#photoInput').addEventListener('change', async e => {
@@ -240,7 +252,11 @@ $('#photoInput').addEventListener('change', async e => {
   try { setPendingPhoto(await photos.resizeImage(file)); }
   catch { toast('Foto konnte nicht gelesen werden.'); }
 });
-$('#btnPhotoRemove').addEventListener('click', () => setPendingPhoto(null));
+$('#btnPhotoRemove').addEventListener('click', () => {
+  // Erst das eigene Foto entfernen; ist keins da, das offizielle Bild
+  if ($('#photoSource').textContent === 'Eigenes Foto') setPendingPhoto(null);
+  else { F.imageUrl.value = ''; refreshPhoto(null); }
+});
 
 function openItem(item) {
   form.reset();
@@ -248,8 +264,7 @@ function openItem(item) {
   $('#suggestions').hidden = true;
   pendingPhoto = undefined;
   formTouched = !!item;
-  showPhoto(null);
-  if (item?.hasPhoto) photos.photoUrl(item.id).then(url => { if (pendingPhoto === undefined) showPhoto(url); });
+  const ownPhoto = item?.hasPhoto ? photos.photoUrl(item.id) : null;
   const isNew = !item;
   item ||= { form: 'tablette', unit: 'Stk', shared: false, rx: false };
   $('#itemDialogTitle').textContent = isNew ? 'Artikel erfassen' : 'Artikel bearbeiten';
@@ -260,6 +275,11 @@ function openItem(item) {
     if (el.type === 'checkbox') el.checked = !!v;
     else el.value = v ?? '';
   }
+  delete F.imageUrl.dataset.source;
+  refreshPhoto(null);
+  ownPhoto?.then(url => { if (pendingPhoto === undefined && url) refreshPhoto(url); });
+  $('#expiryInfo').hidden = true;
+  $('#btnExpiryPhoto').classList.remove('attention');
   fillDatalists();
   updateFormHint();
   updateRxWarn();
@@ -290,6 +310,7 @@ function readForm() {
     batch: F.batch.value.trim(),
     gtin: F.gtin.value.replace(/\D/g, '') ? normalizeGtin(F.gtin.value) : '',
     notes: F.notes.value.trim(),
+    imageUrl: F.imageUrl.value || '',
   };
 }
 
@@ -345,6 +366,7 @@ async function applyScan(raw) {
     const sm = swissmedicInfo(r.gtin);
     if (known) {
       fill(known);
+      if (known.imageUrl && !(pendingPhoto instanceof Blob)) refreshPhoto(null);
       info.push('Produkt bekannt, Angaben übernommen');
     } else if (sm) {
       $('#scanInfo').hidden = false;
@@ -365,7 +387,12 @@ async function applyScan(raw) {
         const form = guessForm(prod.name);
         if (form) { F.form.value = form; F.unit.value = formById(form).unit; }
         if (prod.unit) F.unit.value = prod.unit;
-        info.push('Gefunden in Open Products Facts, bitte kontrollieren');
+        if (prod.imageUrl) {
+          F.imageUrl.value = prod.imageUrl;
+          F.imageUrl.dataset.source = prod.source;
+          if (!(pendingPhoto instanceof Blob)) refreshPhoto(null);
+        }
+        info.push(`Gefunden in ${prod.source}, bitte kontrollieren`);
       } else {
         info.push('Kein Arzneimittel und in keiner Datenbank gefunden: Name bitte einmal eintippen, beim nächsten Scan kennt die App das Produkt');
       }
@@ -377,12 +404,57 @@ async function applyScan(raw) {
   if (r.batch) { F.batch.value = r.batch; info.push(`Charge ${r.batch}`); }
   if (r.count && !F.quantity.value) F.quantity.value = r.count;
 
-  if (r.type === 'gtin' && !r.expiry) info.push('Ablaufdatum bitte von der Packung abtippen (steht nicht im Strichcode)');
+  if (!r.expiry && !F.expiry.value) {
+    info.push('Ablaufdatum steht nicht im Strichcode: unten „📷 Ablaufdatum fotografieren“ antippen oder abtippen');
+    $('#btnExpiryPhoto').classList.add('attention');
+  }
   $('#scanInfo').hidden = false;
   $('#scanInfo').textContent = '✓ ' + info.join(' · ');
   updateFormHint(); updateRxWarn();
   if (!F.name.value) F.name.focus();
 }
+
+// ---------- Ablaufdatum per Foto ----------
+$('#btnExpiryPhoto').addEventListener('click', () => $('#expiryInput').click());
+
+$('#expiryInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const info = $('#expiryInfo');
+  info.hidden = false;
+  info.className = 'scaninfo';
+  info.textContent = 'Foto wird gelesen …';
+  try {
+    const big = await photos.resizeImage(file, 1800, 0.9);
+    // Steht ein DataMatrix-Code mit drauf, ist der am zuverlässigsten
+    let found = {};
+    const code = await decodeImage(big).catch(() => null);
+    const parsed = code ? parseBarcode(code) : null;
+    if (parsed?.expiry) found = { expiry: parsed.expiry, prodDate: parsed.prodDate, batch: parsed.batch };
+    else {
+      const text = await recognizeText(big, m => {
+        if (m.status === 'recognizing text') info.textContent = `Datum wird gelesen … ${Math.round(m.progress * 100)} %`;
+        else if (/load|initializ/.test(m.status)) info.textContent = 'Texterkennung wird vorbereitet (nur beim ersten Mal) …';
+      });
+      found = parseExpiryText(text);
+    }
+    if (!found.expiry) {
+      info.className = 'warn';
+      info.textContent = 'Kein Datum gefunden. Tipp: Ganz nah an das Datum gehen, gutes Licht, ohne Spiegelung. Eingeprägte Daten (ohne Farbe) sind schwer lesbar: das Datum dann bitte abtippen.';
+      return;
+    }
+    F.expiry.value = found.expiry;
+    const parts = [`Ablauf ${fmtDate(found.expiry)}`];
+    if (found.prodDate && !F.prodDate.value) { F.prodDate.value = found.prodDate; parts.push(`hergestellt ${fmtDate(found.prodDate)}`); }
+    if (found.batch && !F.batch.value) { F.batch.value = found.batch; parts.push(`Charge ${found.batch}`); }
+    $('#btnExpiryPhoto').classList.remove('attention');
+    info.textContent = '✓ ' + parts.join(' · ') + '. Bitte kurz mit der Packung vergleichen.';
+  } catch (err) {
+    info.className = 'warn';
+    info.textContent = 'Lesen fehlgeschlagen: ' + err.message;
+  }
+});
 
 // ---------- Erkennen ohne Packung (Foto + Texterkennung) ----------
 $('#btnRecognize').addEventListener('click', () => $('#recognizeInput').click());
@@ -397,8 +469,6 @@ $('#recognizeInput').addEventListener('change', async e => {
   info.textContent = 'Foto wird gelesen …';
   try {
     const big = await photos.resizeImage(file, 1800, 0.9);
-    // Das Foto gleich als Produktfoto übernehmen, wenn noch keines da ist
-    if (!$('#photoImg').getAttribute('src')) setPendingPhoto(await photos.resizeImage(file));
     // 1. Ist ein Strichcode oder DataMatrix-Code im Bild? Der ist zuverlässiger als Text.
     info.textContent = 'Suche Strichcode im Foto …';
     const code = await decodeImage(big).catch(() => null);

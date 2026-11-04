@@ -7,7 +7,7 @@ const SOURCES = [
   'https://world.openbeautyfacts.org',
   'https://world.openfoodfacts.org',
 ];
-const FIELDS = 'product_name,product_name_de,product_name_fr,generic_name_de,generic_name,brands,quantity';
+const FIELDS = 'product_name,product_name_de,product_name_fr,generic_name_de,generic_name,brands,quantity,image_front_small_url,image_front_url';
 
 async function query(base, code, signal) {
   const r = await fetch(`${base}/api/v2/product/${code}.json?fields=${FIELDS}`, { signal });
@@ -17,7 +17,12 @@ async function query(base, code, signal) {
   const p = j.product;
   const name = p.product_name_de || p.product_name || p.generic_name_de || p.product_name_fr || p.generic_name;
   if (!name) throw new Error('no name');
-  return { name: name.trim(), brand: (p.brands || '').split(',')[0].trim(), quantity: p.quantity || '' };
+  const img = p.image_front_url || p.image_front_small_url || '';
+  return {
+    name: name.trim(), brand: (p.brands || '').split(',')[0].trim(), quantity: p.quantity || '',
+    imageUrl: /^https:\/\/images\.open(food|beauty|products)facts\.org\//.test(img) ? img : '',
+    source: base.includes('products') ? 'Open Products Facts' : base.includes('beauty') ? 'Open Beauty Facts' : 'Open Food Facts',
+  };
 }
 
 /** Sucht eine GTIN in den offenen Datenbanken. Liefert { name, quantity, unit } oder null. */
@@ -33,7 +38,7 @@ export async function lookupOpenProduct(gtin) {
     const m = /(\d+(?:[.,]\d+)?)\s*(ml|g|stk|stück|st\.?|pcs|pieces|pièces)?/i.exec(p.quantity);
     const qty = m ? parseFloat(m[1].replace(',', '.')) : null;
     const unit = !m?.[2] ? null : /ml/i.test(m[2]) ? 'ml' : /^g$/i.test(m[2]) ? 'g' : 'Stk';
-    return { name, quantity: qty, unit };
+    return { name, quantity: qty, unit, imageUrl: p.imageUrl, source: p.source };
   } catch {
     return null;
   } finally {

@@ -55,7 +55,7 @@ export function upsertItem(item) {
     state.catalog[normalizeGtin(item.gtin)] = {
       name: item.name, substance: item.substance, strength: item.strength,
       form: item.form, quantity: item.quantity, unit: item.unit,
-      rx: item.rx, category: item.category, openDays: item.openDays,
+      rx: item.rx, category: item.category, openDays: item.openDays, imageUrl: item.imageUrl,
     };
   }
   save();

@@ -232,3 +232,7 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .item.has-photo .badges { grid-column: 2 / -1; }
 .suggestion.picked { border-color: var(--primary); background: var(--primary-soft); }
 .scan-foot .btn.wide + .btn.wide { margin-top: 8px; }
+.small-btn { min-height: 36px; font-size: .85rem; padding: 6px 10px; }
+.photo-actions p { margin: 0; }
+#btnExpiryPhoto { margin: 4px 0 6px; }
+#btnExpiryPhoto.attention { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); font-weight: 600; }
