@@ -1,11 +1,11 @@
 import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
 import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, formById } from './knowledge.js';
 import * as store from './store.js';
-import { startScanner, decodeImage } from './scanner.js';
+import { startScanner, decodeImage, startCamera, grabFrameRegion } from './scanner.js';
 import { lookupSwissDrug, searchByText, guessForm } from './drugdb.js';
 import { lookupOpenProduct } from './productdb.js';
 import * as photos from './photos.js';
-import { recognizeText } from './ocr.js';
+import { recognizeText, preloadOcr } from './ocr.js';
 import { parseExpiryText } from './dates.js';
 import { buildShareCode, shareLink, parseShareCode, sharedItems } from './share.js';
 
@@ -13,6 +13,23 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtDate = iso => iso ? new Date(iso + (iso.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('de-CH') : '–';
+// Ablauf- und Herstelldatum: nur Monat/Jahr. Intern gilt der Monatsletzte (JJJJ-MM-TT).
+const fmtMonth = iso => iso ? `${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '–';
+const monthEnd = (y, m) => `${y}-${String(m).padStart(2, '0')}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
+/** Setzt ein Monatsfeld (type=month, ältere Browser: Textfeld MM/JJJJ). */
+function setMonth(el, iso) {
+  if (!iso) { el.value = ''; return; }
+  el.value = el.type === 'month' ? iso.slice(0, 7) : fmtMonth(iso);
+}
+/** Liest ein Monatsfeld und liefert den Monatsletzten als JJJJ-MM-TT. */
+function readMonth(el) {
+  const v = el.value.trim();
+  let m = /^(\d{4})-(\d{1,2})/.exec(v);
+  if (m) return monthEnd(+m[1], +m[2]);
+  m = /^(\d{1,2})\s*[./\s-]\s*(\d{4})$/.exec(v);
+  if (m && +m[1] >= 1 && +m[1] <= 12) return monthEnd(+m[2], +m[1]);
+  return null;
+}
 const fmtNum = n => (n === '' || n == null || isNaN(n)) ? '' : Number(n).toLocaleString('de-CH');
 
 let filter = 'all';
@@ -90,7 +107,7 @@ function itemCard(item, { readonly = false } = {}) {
       <div class="right">
         <div>${esc(amountText(item))}</div>
         ${pct != null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}
-        <div class="muted">${st.eff ? fmtDate(st.eff.date) : ''}</div>
+        <div class="muted">${!st.eff ? '' : st.eff.reason === 'nach Anbruch' ? fmtDate(st.eff.date) : fmtMonth(st.eff.date)}</div>
       </div>
       <div class="badges">
         <span class="badge ${st.status}">${describeDays(st.days)}${st.eff?.reason === 'nach Anbruch' ? ' (Anbruch)' : ''}</span>
@@ -212,13 +229,6 @@ F.openedAt.addEventListener('change', () => {
     if (f.openDays) F.openDays.value = f.openDays;
   }
 });
-$('#btnMonthEnd').addEventListener('click', () => {
-  const v = F.expiry.value;
-  if (!v) return toast('Zuerst ein Ablaufdatum wählen.');
-  const [y, m] = v.split('-').map(Number);
-  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  F.expiry.value = `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
-});
 
 // undefined = unverändert, null = entfernen, Blob = neues Foto
 let pendingPhoto;
@@ -273,6 +283,7 @@ function openItem(item) {
     if (!el.name) continue;
     const v = item[el.name];
     if (el.type === 'checkbox') el.checked = !!v;
+    else if (el.name === 'expiry' || el.name === 'prodDate') setMonth(el, v);
     else el.value = v ?? '';
   }
   delete F.imageUrl.dataset.source;
@@ -298,8 +309,8 @@ function readForm() {
     quantity: num(F.quantity.value),
     remaining: num(F.remaining.value),
     unit: F.unit.value,
-    expiry: F.expiry.value || null,
-    prodDate: F.prodDate.value || null,
+    expiry: readMonth(F.expiry),
+    prodDate: readMonth(F.prodDate),
     openedAt: F.openedAt.value || null,
     openDays: num(F.openDays.value),
     rx: F.rx.checked,
@@ -399,13 +410,13 @@ async function applyScan(raw) {
     }
   }
   if (r.pzn) info.push(`PZN ${r.pzn}`);
-  if (r.expiry) { F.expiry.value = r.expiry; info.push(`Ablauf ${fmtDate(r.expiry)}`); }
-  if (r.prodDate) { F.prodDate.value = r.prodDate; info.push(`hergestellt ${fmtDate(r.prodDate)}`); }
+  if (r.expiry) { setMonth(F.expiry, r.expiry); info.push(`Ablauf ${fmtMonth(r.expiry)}`); }
+  if (r.prodDate) { setMonth(F.prodDate, r.prodDate); info.push(`hergestellt ${fmtMonth(r.prodDate)}`); }
   if (r.batch) { F.batch.value = r.batch; info.push(`Charge ${r.batch}`); }
   if (r.count && !F.quantity.value) F.quantity.value = r.count;
 
   if (!r.expiry && !F.expiry.value) {
-    info.push('Ablaufdatum steht nicht im Strichcode: unten „📷 Ablaufdatum fotografieren“ antippen oder abtippen');
+    info.push('Ablaufdatum steht nicht im Strichcode: unten „📷 Ablaufdatum scannen“ antippen oder eingeben');
     $('#btnExpiryPhoto').classList.add('attention');
   }
   $('#scanInfo').hidden = false;
@@ -415,7 +426,23 @@ async function applyScan(raw) {
 }
 
 // ---------- Ablaufdatum per Foto ----------
-$('#btnExpiryPhoto').addEventListener('click', () => $('#expiryInput').click());
+$('#btnExpiryPhoto').addEventListener('click', () => openDateScanner());
+
+/** Ausschnitte eines Bildes als Canvas (Etikett ist im Foto oft klein, Hintergrund stört). */
+async function* imageTiles(blob) {
+  const img = await createImageBitmap(blob);
+  const tw = img.width * 0.7, th = img.height * 0.32;
+  const xs = [0.5, 0, 1], ys = [0.5, 0.3, 0.7, 0.1, 0.9, 0, 1];
+  for (const fy of ys) for (const fx of xs) {
+    const c = document.createElement('canvas');
+    const scale = Math.min(2, 1400 / tw);
+    c.width = Math.round(tw * scale); c.height = Math.round(th * scale);
+    const ctx = c.getContext('2d');
+    ctx.filter = 'grayscale(1) contrast(1.4)';
+    ctx.drawImage(img, (img.width - tw) * fx, (img.height - th) * fy, tw, th, 0, 0, c.width, c.height);
+    yield c;
+  }
+}
 
 $('#expiryInput').addEventListener('change', async e => {
   const file = e.target.files[0];
@@ -428,28 +455,26 @@ $('#expiryInput').addEventListener('change', async e => {
   try {
     const big = await photos.resizeImage(file, 1800, 0.9);
     // Steht ein DataMatrix-Code mit drauf, ist der am zuverlässigsten
-    let found = {};
     const code = await decodeImage(big).catch(() => null);
     const parsed = code ? parseBarcode(code) : null;
-    if (parsed?.expiry) found = { expiry: parsed.expiry, prodDate: parsed.prodDate, batch: parsed.batch };
-    else {
-      const text = await recognizeText(big, m => {
-        if (m.status === 'recognizing text') info.textContent = `Datum wird gelesen … ${Math.round(m.progress * 100)} %`;
-        else if (/load|initializ/.test(m.status)) info.textContent = 'Texterkennung wird vorbereitet (nur beim ersten Mal) …';
-      });
-      found = parseExpiryText(text);
+    if (parsed?.expiry) return setExpiryFromScan(parsed, 'DataMatrix-Code');
+    const progress = m => { if (/load|initializ/.test(m.status)) info.textContent = 'Texterkennung wird vorbereitet (nur beim ersten Mal) …'; };
+    // Ganzes Bild, dann Ausschnitte. Die Charge wird aus Text nicht übernommen (Punktdruck oft falsch gelesen).
+    let found = parseExpiryText(await recognizeText(big, progress, { sparse: true }));
+    let n = 0;
+    if (!found.expiry) {
+      for await (const tile of imageTiles(big)) {
+        info.textContent = `Datum wird gesucht … (${++n}/21)`;
+        found = parseExpiryText(await recognizeText(tile, progress, { sparse: true }));
+        if (found.expiry) break;
+      }
     }
     if (!found.expiry) {
       info.className = 'warn';
-      info.textContent = 'Kein Datum gefunden. Tipp: Ganz nah an das Datum gehen, gutes Licht, ohne Spiegelung. Eingeprägte Daten (ohne Farbe) sind schwer lesbar: das Datum dann bitte abtippen.';
+      info.textContent = 'Kein Datum gefunden. Tipp: „Ablaufdatum scannen“ verwenden und das Datum in den Rahmen halten, oder Monat/Jahr eingeben. Eingeprägte Daten (ohne Farbe) sind kaum lesbar.';
       return;
     }
-    F.expiry.value = found.expiry;
-    const parts = [`Ablauf ${fmtDate(found.expiry)}`];
-    if (found.prodDate && !F.prodDate.value) { F.prodDate.value = found.prodDate; parts.push(`hergestellt ${fmtDate(found.prodDate)}`); }
-    if (found.batch && !F.batch.value) { F.batch.value = found.batch; parts.push(`Charge ${found.batch}`); }
-    $('#btnExpiryPhoto').classList.remove('attention');
-    info.textContent = '✓ ' + parts.join(' · ') + '. Bitte kurz mit der Packung vergleichen.';
+    setExpiryFromScan({ expiry: found.expiry, prodDate: found.prodDate }, 'Foto');
   } catch (err) {
     info.className = 'warn';
     info.textContent = 'Lesen fehlgeschlagen: ' + err.message;
@@ -544,7 +569,17 @@ const scanDlg = $('#scanDialog');
 let stopScan = null;
 let scanHandler = null;
 
+let scanMode = 'code'; // 'code' = Strichcode/QR, 'date' = Ablaufdatum lesen
+
+function setScanMode(mode) {
+  scanMode = mode;
+  scanDlg.classList.toggle('date-mode', mode === 'date');
+  $('#manualRow').hidden = mode === 'date';
+  $('#btnScanPhoto').textContent = mode === 'date' ? '📷 Stattdessen Foto wählen' : '📷 Stattdessen Foto aufnehmen';
+}
+
 async function openScanner(handler, hint) {
+  setScanMode('code');
   scanHandler = handler;
   $('#manualCode').value = '';
   $('#scanStatus').textContent = 'Kamera wird gestartet …';
@@ -566,9 +601,63 @@ function closeScanner() {
 scanDlg.addEventListener('close', () => { stopScan?.(); stopScan = null; });
 $('#btnScanClose').addEventListener('click', closeScanner);
 $('#btnScanPhoto').addEventListener('click', () => {
+  const input = scanMode === 'date' ? '#expiryInput' : '#recognizeInput';
   closeScanner();
-  $('#recognizeInput').click();
+  $(input).click();
 });
+
+// Datumskamera: liest laufend nur den Rahmen-Ausschnitt, bis zweimal dasselbe Datum erkannt wurde
+async function openDateScanner() {
+  setScanMode('date');
+  $('#btnScanPhoto').hidden = false;
+  const status = $('#scanStatus');
+  status.textContent = 'Kamera wird gestartet …';
+  scanDlg.showModal();
+  $('#btnScanClose').focus();
+  let alive = true;
+  let stopCam;
+  try {
+    stopCam = await startCamera($('#scanVideo'));
+  } catch (e) {
+    status.textContent = (e.name === 'NotAllowedError' ? 'Kein Kamerazugriff erlaubt.' : e.message) + ' Du kannst stattdessen ein Foto wählen.';
+    return;
+  }
+  stopScan = () => { alive = false; stopCam(); };
+  if (!scanDlg.open) return stopScan();
+  status.textContent = 'Texterkennung wird vorbereitet …';
+  await preloadOcr().catch(() => {});
+  status.textContent = 'Ablaufdatum in den Rahmen halten, möglichst nah und gerade.';
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let last = null;
+  while (alive) {
+    const canvas = grabFrameRegion($('#scanVideo'), $('#scanFrame'));
+    if (!canvas) { await sleep(200); continue; }
+    let found = {};
+    try { found = parseExpiryText(await recognizeText(canvas, null, { sparse: true })); } catch { /* weiter */ }
+    if (!alive) return;
+    if (found.expiry && found.expiry === last) {
+      closeScanner();
+      setExpiryFromScan({ expiry: found.expiry, prodDate: found.prodDate }, 'Kamera');
+      return;
+    }
+    if (found.expiry) status.textContent = `Gelesen: ${fmtMonth(found.expiry)}. Bitte kurz ruhig halten …`;
+    else if (last) status.textContent = 'Ablaufdatum in den Rahmen halten, möglichst nah und gerade.';
+    last = found.expiry || null;
+    await sleep(150);
+  }
+}
+
+function setExpiryFromScan(found, via) {
+  const info = $('#expiryInfo');
+  info.hidden = false;
+  info.className = 'scaninfo';
+  setMonth(F.expiry, found.expiry);
+  const parts = [`Ablauf ${fmtMonth(found.expiry)}`];
+  if (found.prodDate && !F.prodDate.value) { setMonth(F.prodDate, found.prodDate); parts.push(`hergestellt ${fmtMonth(found.prodDate)}`); }
+  if (found.batch && !F.batch.value) { F.batch.value = found.batch; parts.push(`Charge ${found.batch}`); }
+  $('#btnExpiryPhoto').classList.remove('attention');
+  info.textContent = `✓ ${parts.join(' · ')} (${via}). Bitte kurz mit der Packung vergleichen.`;
+}
 $('#btnManual').addEventListener('click', () => {
   const v = $('#manualCode').value.trim();
   if (!v) return;
