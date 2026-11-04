@@ -1,11 +1,12 @@
 import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
-import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, FORM_USES, looksFrench, formById } from './knowledge.js';
+import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, FORM_USES, PRODUCT_TYPES, looksFrench, formById } from './knowledge.js';
 import * as store from './store.js';
-import { startScanner, decodeImage } from './scanner.js';
+import { startScanner, decodeImage, startCamera } from './scanner.js';
 import { lookupSwissDrug, searchByText, guessForm } from './drugdb.js';
 import { lookupOpenProduct } from './productdb.js';
 import * as photos from './photos.js';
 import { recognizeText } from './ocr.js';
+import { researchProduct, getApiKey, setApiKey } from './research.js';
 import { SYMPTOMS, EMERGENCY, detectSymptoms, adviseFor } from './advice.js';
 import { buildShareCode, shareLink, parseShareCode, sharedItems } from './share.js';
 
@@ -259,6 +260,7 @@ const F = form.elements;
 
 $('#formSelect').innerHTML = FORMS.map(f => `<option value="${f.id}">${esc(f.label)}</option>`).join('');
 $('#unitSelect').innerHTML = UNITS.map(u => `<option>${u}</option>`).join('');
+$('#productTypeSelect').innerHTML = PRODUCT_TYPES.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('');
 $('#categorySelect').innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${esc(c.label)}</option>`).join('');
 
 function fillDatalists() {
@@ -371,6 +373,7 @@ function autoFormFromName() {
     updateFormHint();
   }
   if (f && FORM_USES[f] && !F.usage.value) F.usage.value = FORM_USES[f];
+  if ((f === 'pflaster' || f === 'medizinprodukt') && !F.productType.value) F.productType.value = 'medizinprodukt';
 }
 F.name.addEventListener('change', autoFormFromName);
 
@@ -490,6 +493,9 @@ function readForm() {
     substance: F.substance.value.trim(),
     usage: F.usage.value.trim(),
     atc: F.atc.value.trim(),
+    manufacturer: F.manufacturer.value.trim(),
+    productType: F.productType.value,
+    info: F.info.value.trim(),
     strength: F.strength.value.trim(),
     form: F.form.value,
     quantity: num(F.quantity.value),
@@ -556,10 +562,8 @@ $('#btnDelete').addEventListener('click', () => {
   toast('Gelöscht');
 });
 // „+ Erfassen“ öffnet direkt die Kamera für den Strichcode; Schliessen führt ins Formular
-$('#fab').addEventListener('click', () => {
-  openItem(null);
-  openScanner(applyScan, 'Strichcode in den Rahmen halten.');
-});
+// „+ Erfassen“: zuerst Fotos der Packung (wichtigste Seite zuerst), dann „Abschliessen“
+$('#fab').addEventListener('click', () => openCapture('new'));
 
 async function applyScan(raw) {
   const r = parseBarcode(raw);
@@ -590,6 +594,7 @@ async function applyScan(raw) {
       const drug = await lookupSwissDrug(r.gtin);
       if (drug) {
         fill(drug);
+        if (drug.usageDetail && drug.usageDetail !== drug.usage && !F.info.value) F.info.value = `• Anwendung laut Swissmedic: ${drug.usageDetail}`;
         info.push('Gefunden in der Swissmedic-Liste');
       } else {
         info.push(`Swissmedic-Nr. ${sm.authNo}, nicht in der Liste gefunden: Name bitte eintippen`);
@@ -603,6 +608,7 @@ async function applyScan(raw) {
         const form = guessForm(prod.name);
         if (form) { F.form.value = form; F.unit.value = formById(form).unit; }
         if (form && FORM_USES[form] && !F.usage.value) F.usage.value = FORM_USES[form];
+        if ((form === 'pflaster' || form === 'medizinprodukt') && !F.productType.value) F.productType.value = 'medizinprodukt';
         if (prod.unit) F.unit.value = prod.unit;
         if (prod.imageUrl) {
           F.imageUrl.value = prod.imageUrl;
@@ -626,7 +632,7 @@ async function applyScan(raw) {
 }
 
 // ---------- Erkennen ohne Packung (Foto + Texterkennung) ----------
-$('#btnRecognize').addEventListener('click', () => $('#photoInput').click());
+$('#btnRecognize').addEventListener('click', () => openCapture('add'));
 
 /** Liest ein Foto aus: zuerst Strichcode/DataMatrix, sonst (falls noch kein Name) den aufgedruckten Text. */
 async function analyzePhoto(file) {
@@ -653,6 +659,161 @@ async function analyzePhoto(file) {
     renderSuggestions(await searchByText(text), text);
   } catch (err) {
     info.textContent = 'Erkennung fehlgeschlagen: ' + err.message;
+  }
+}
+
+// ---------- Erfassen mit Fotos ----------
+const capDlg = $('#captureDialog');
+let capCam = null;
+let capShots = [];
+let capMode = 'new'; // 'new' = neuer Artikel, 'add' = Fotos zum offenen Artikel
+
+function capRender() {
+  const n = capShots.length;
+  $('#capHint').innerHTML = n === 0
+    ? '<strong>1.</strong> Fotografiere zuerst die <strong>wichtigste Seite</strong> der Packung (Vorderseite mit dem Namen).'
+    : `✓ ${n} Foto${n > 1 ? 's' : ''}. Fotografiere jetzt <strong>weitere relevante Seiten</strong>: Rückseite, Strichcode, Packungsinhalt (z. B. 100 ml). Dann <strong>Abschliessen</strong>.`;
+  $('#capDone').disabled = n === 0;
+  $('#capThumbs').innerHTML = capShots.map(s => `<img src="${s.url}" alt="">`).join('');
+}
+
+async function openCapture(mode) {
+  capMode = mode;
+  capShots = [];
+  capRender();
+  $('#capShoot').disabled = false;
+  $('#capManual').hidden = mode !== 'new';
+  capDlg.showModal();
+  $('#capCancel').focus();
+  try {
+    capCam = await startCamera($('#capVideo'));
+    if (!capDlg.open) { capCam.stop(); capCam = null; }
+  } catch (e) {
+    $('#capShoot').disabled = true;
+    $('#capHint').textContent = (e.name === 'NotAllowedError' ? 'Kein Kamerazugriff erlaubt. ' : 'Kamera nicht verfügbar. ') + 'Wähle die Fotos aus der Galerie.';
+  }
+}
+function closeCapture() {
+  capCam?.stop(); capCam = null;
+  if (capDlg.open) capDlg.close();
+}
+capDlg.addEventListener('close', () => { capCam?.stop(); capCam = null; });
+
+$('#capShoot').addEventListener('click', async () => {
+  if (!capCam) return;
+  $('#capFlash').classList.add('on');
+  setTimeout(() => $('#capFlash').classList.remove('on'), 80);
+  try {
+    const blob = await capCam.takePhoto();
+    capShots.push({ blob, url: URL.createObjectURL(blob) });
+    capRender();
+  } catch { toast('Foto konnte nicht aufgenommen werden.'); }
+});
+$('#capFile').addEventListener('change', e => {
+  for (const f of e.target.files) capShots.push({ blob: f, url: URL.createObjectURL(f) });
+  e.target.value = '';
+  capRender();
+});
+$('#capCancel').addEventListener('click', closeCapture);
+$('#capManual').addEventListener('click', () => { closeCapture(); openItem(null); });
+$('#capDone').addEventListener('click', async () => {
+  const shots = capShots.map(s => s.blob);
+  closeCapture();
+  if (capMode === 'new') openItem(null);
+  // Das erste Foto wird das Artikelbild; alle Fotos werden ausgewertet
+  for (const b of shots) {
+    const small = await photos.resizeImage(b, 1400, 0.85).catch(() => null);
+    if (small) gallery.push({ blob: small, url: URL.createObjectURL(small) });
+  }
+  renderGallery();
+  analyzeAll(shots);
+});
+
+/** Packungsinhalt aus gelesenem Text, z. B. „100 ml“, „20 Tabletten“. Grösster Wert gewinnt. */
+function quantityFromText(text) {
+  const rx = /(\d+(?:[.,]\d+)?)\s*(ml|g|stück|stk|filmtabletten|brausetabletten|tabletten|kapseln|dragées|beutel|sachets|zäpfchen|suppositorien|pflaster|dosen|sprühstösse|hübe|ampullen)(?![a-zäöü])/gi;
+  let best = null, m;
+  while ((m = rx.exec(text))) {
+    const qty = parseFloat(m[1].replace(',', '.'));
+    if (!(qty > 0) || qty > 5000) continue;
+    const u = m[2].toLowerCase();
+    const unit = u === 'ml' ? 'ml' : u === 'g' ? 'g' : /dosen|sprüh|hübe/.test(u) ? 'Dosen' : /beutel|sachet/.test(u) ? 'Beutel' : /ampull/.test(u) ? 'Ampullen' : 'Stk';
+    if (!best || qty > best.qty) best = { qty, unit };
+  }
+  return best;
+}
+
+/** Wertet alle Fotos aus: Strichcode, Text (Menge, Name, pflanzlich) und – falls eingerichtet – die KI-Recherche. */
+async function analyzeAll(shots) {
+  const info = $('#scanInfo');
+  info.hidden = false;
+  $('#suggestions').hidden = true;
+  const bigs = [];
+  for (const b of shots) bigs.push(await photos.resizeImage(b, 1800, 0.9).catch(() => b));
+  try {
+    // 1. Strichcode / DataMatrix in irgendeinem Foto
+    for (let i = 0; i < bigs.length; i++) {
+      info.textContent = `Suche Strichcode (${i + 1}/${bigs.length}) …`;
+      const code = await decodeImage(bigs[i]).catch(() => null);
+      if (code && parseBarcode(code).type !== 'text') { await applyScan(code); break; }
+    }
+    // 2. Aufgedruckten Text lesen, wenn noch etwas fehlt
+    let text = '';
+    if (!F.name.value || !F.quantity.value || !F.productType.value) {
+      for (let i = 0; i < Math.min(bigs.length, 4); i++) {
+        info.textContent = `Text wird gelesen (${i + 1}/${Math.min(bigs.length, 4)}) …`;
+        text += '\n' + await recognizeText(bigs[i], m => {
+          if (/load|initializ/.test(m.status)) info.textContent = 'Texterkennung wird vorbereitet (nur beim ersten Mal) …';
+        }, { sparse: true }).catch(() => '');
+      }
+      const q = quantityFromText(text);
+      if (q && !F.quantity.value) { F.quantity.value = q.qty; F.unit.value = q.unit; }
+      if (!F.productType.value && /pflanzlich|phytoarznei|phytothérap|phytotherap/i.test(text)) F.productType.value = 'pflanzlich';
+    }
+    // 3. KI-Recherche mit Websuche (optional)
+    if (getApiKey()) {
+      await runResearch(bigs);
+    } else if (!F.name.value && text.trim()) {
+      renderSuggestions(await searchByText(text), text);
+    } else {
+      info.textContent = (info.textContent.startsWith('✓') ? info.textContent + ' · ' : '✓ ')
+        + 'Tipp: Mit einem Claude-API-Schlüssel (Einstellungen) recherchiert die App Hersteller, Art und Produktinfos automatisch.';
+    }
+    if (!F.name.value) F.name.focus();
+  } catch (err) {
+    info.textContent = 'Auswertung fehlgeschlagen: ' + err.message;
+  }
+}
+
+async function runResearch(bigs) {
+  const info = $('#scanInfo');
+  const known = {};
+  for (const [k, label] of [['name', 'name'], ['manufacturer', 'hersteller'], ['usage', 'anwendung']]) if (F[k].value) known[label] = F[k].value;
+  if (F.quantity.value) known.menge = `${F.quantity.value} ${F.unit.value}`;
+  try {
+    const r = await researchProduct({ images: bigs, known, onStatus: t => { info.textContent = t; } });
+    const done = [];
+    const setIf = (el, v, label, force = false) => {
+      if (!v || (!force && el.value)) return;
+      el.value = v; done.push(label);
+    };
+    setIf(F.name, r.name, 'Name');
+    setIf(F.manufacturer, r.hersteller, 'Hersteller');
+    if (!F.quantity.value && parseFloat(r.menge) > 0) { F.quantity.value = parseFloat(r.menge); if (r.einheit) F.unit.value = r.einheit; done.push('Menge'); }
+    if (!formTouched && !F.atc.value && r.darreichungsform && FORMS.some(f => f.id === r.darreichungsform)) { F.form.value = r.darreichungsform; updateFormHint(); }
+    if (r.art && (!F.productType.value || r.art === 'pflanzlich')) { F.productType.value = r.art; done.push('Art'); }
+    setIf(F.usage, r.anwendung_allgemein, 'Anwendung', looksFrench(F.usage.value));
+    if (r.produktinfo) {
+      const src = r.quellen ? `\nQuellen: ${r.quellen}` : '';
+      F.info.value = [F.info.value, r.produktinfo.trim() + src].filter(Boolean).join('\n');
+      done.push('Produktinfo');
+    }
+    if (!F.category.value && r.rezeptpflichtig !== 'unbekannt') { F.rx.checked = r.rezeptpflichtig === 'ja'; updateRxWarn(); }
+    info.textContent = done.length
+      ? `✓ Recherche: ${done.join(', ')} ergänzt. Bitte kurz kontrollieren und das Ablaufdatum eingeben.`
+      : '✓ Recherche abgeschlossen, keine neuen Angaben gefunden.';
+  } catch (err) {
+    info.textContent = 'Recherche nicht möglich: ' + err.message;
   }
 }
 
@@ -1058,6 +1219,24 @@ $('#btnReset').addEventListener('click', () => {
   $('#householdName').value = store.getState().household.name;
   toast('Alle Daten gelöscht');
 });
+
+// ---------- KI-Recherche: API-Schlüssel ----------
+function renderKeyState() {
+  const k = getApiKey();
+  $('#apiKeyState').textContent = k ? `✓ Schlüssel gespeichert (…${k.slice(-4)}). Die Recherche läuft nach dem Fotografieren automatisch.` : 'Kein Schlüssel hinterlegt: Die App arbeitet ohne KI-Recherche.';
+  $('#btnSaveKey').textContent = k ? 'Entfernen' : 'Speichern';
+  $('#apiKey').hidden = !!k;
+}
+$('#btnSaveKey').addEventListener('click', () => {
+  if (getApiKey()) { setApiKey(''); toast('Schlüssel entfernt'); }
+  else {
+    const v = $('#apiKey').value.trim();
+    if (!/^sk-ant-/.test(v)) return toast('Das sieht nicht wie ein Claude-API-Schlüssel aus (beginnt mit sk-ant-).');
+    setApiKey(v); $('#apiKey').value = ''; toast('Schlüssel gespeichert');
+  }
+  renderKeyState();
+});
+renderKeyState();
 
 // ---------- Start ----------
 store.onChange(() => { renderInventory(); renderLocationSettings(); if ($('#view-linked').classList.contains('active')) renderLinked(); });

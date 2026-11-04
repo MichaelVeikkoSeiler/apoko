@@ -337,3 +337,20 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .rec.rx { border-color: var(--rx); }
 .rec.expired { opacity: .65; cursor: default; }
 .emergency { text-align: center; color: var(--muted); margin: 16px 0 8px; }
+
+/* Foto-Erfassung */
+.capture .scan-wrap { background: #000; }
+.cap-hint { position: absolute; left: 12px; right: 12px; top: calc(12px + env(safe-area-inset-top)); margin: 0; padding: 10px 12px; border-radius: 12px; background: rgb(0 0 0 / .6); color: #fff; font-size: .95rem; text-align: center; }
+.cap-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .25s; }
+.cap-flash.on { opacity: .7; transition: none; }
+.cap-thumbs { display: flex; gap: 6px; overflow-x: auto; min-height: 56px; margin-bottom: 10px; }
+.cap-thumbs img { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; border: 2px solid #333; flex: none; }
+.cap-thumbs img:first-child { border-color: #2bb3a5; }
+.cap-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
+.cap-row .btn { width: 100%; }
+.cap-row .btn.primary:disabled { opacity: .45; }
+.shutter { width: 72px; height: 72px; border-radius: 50%; border: 5px solid #fff; background: #fff; box-shadow: inset 0 0 0 4px #111; cursor: pointer; }
+.shutter:active { transform: scale(.94); }
+.cap-links { display: flex; justify-content: space-between; margin-top: 10px; }
+.cap-links .linkbtn { color: #9fe3da; font-size: .85rem; }
+.scan-foot .btn.primary:not(:disabled) { background: var(--primary); color: #fff; border-color: var(--primary); }

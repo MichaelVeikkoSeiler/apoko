@@ -18,6 +18,8 @@ Apoko ist eine Web-App (PWA) fürs Handy. Sie zeigt dir, welche Medikamente du z
   - Beim Teilen von rezeptpflichtigen Medikamenten zeigt die App eine Warnung.
   - Die App erzeugt einen **QR-Code bzw. Link**. Der andere Haushalt scannt bzw. öffnet ihn und ist damit verbunden. Danach kann er suchen: „Wer hat Ibuprofen?“
   - Für einen neuen Stand teilst du einfach noch einmal. Beim Empfänger wird der Eintrag dann aktualisiert.
+- **Erfassen mit Fotos**: „+ Erfassen“ öffnet die Kamera. Zuerst die wichtigste Seite fotografieren, dann weitere relevante Seiten, dann „Abschliessen“. Das erste Foto wird das Artikelbild. Aus allen Fotos liest die App Strichcode (→ Swissmedic: Name, Hersteller, Menge, Art z. B. pflanzlich, Anwendung) und Text (Menge, Name).
+- **KI-Recherche (optional)**: Mit eigenem Claude-API-Schlüssel (Einstellungen) recherchiert Claude anhand der Fotos im Web und ergänzt Hersteller, Art, Menge, „Anwendung (allgemein)“ und eine kurze Produktinfo mit Quellen. Die Fotos gehen dafür an Anthropic; der Schlüssel bleibt auf dem Gerät.
 - **Beschwerden**: Beschwerden eintippen oder antippen (z. B. Kopfschmerzen, Durchfall, Insektenstich). Die App zeigt passende, nicht abgelaufene Mittel aus dem Vorrat samt Standort, trennt rezeptpflichtige ab, nennt Warnzeichen („sofort 144 bei …“) und einen Tipp. Ist nichts im Haus, zeigt sie, wonach man in der Apotheke fragen kann und ob ein verbundener Haushalt etwas hat. Zuordnung über den ATC-Code. Keine Diagnose.
 - **Checkliste**: Grundausstattung einer Hausapotheke, abgeglichen mit deinem Vorrat.
 - **Offline-fähig**, ohne Konto und ohne Server. Die Daten bleiben auf dem Gerät. Als Sicherung gibt es Export und Import (JSON).
@@ -44,7 +46,8 @@ npm test             # Tests für den Strichcode-Parser
 | `js/store.js` | Lokale Datenhaltung und Ablauf-Logik |
 | `js/share.js` | Teilen-Codes (komprimiert, als Link/QR) |
 | `js/scanner.js` | Kamera-Scanner (BarcodeDetector, sonst ZXing) |
-| `vendor/` | ZXing (Apache-2.0), qrcode-generator (MIT) |
+| `js/research.js` | KI-Recherche mit Claude (Websuche, strukturierte Rückgabe) |
+| `vendor/` | ZXing (Apache-2.0), qrcode-generator (MIT), Tesseract.js (Apache-2.0), Anthropic SDK (MIT) |
 
 ## Grenzen / mögliche nächste Schritte
 

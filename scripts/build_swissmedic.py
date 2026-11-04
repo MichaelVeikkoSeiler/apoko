@@ -6,7 +6,8 @@
   python scripts/build_swissmedic.py --xlsx liste.xlsx data/swissmedic.json
 
 Ergebnis: { "<Zulassungsnr 5-stellig><Packungscode 3-stellig>":
-            [Bezeichnung, Wirkstoffe, Packungsgrösse, Einheit, Abgabekategorie, ATC-Code, Anwendungsgebiet] }
+            [Bezeichnung, Wirkstoffe, Packungsgrösse, Einheit, Abgabekategorie, ATC-Code,
+             Anwendungsgebiet, Zulassungsinhaberin, Heilmittelcode] }
 Die GTIN Schweizer Arzneimittel ist 7680 + Zulassungsnr + Packungscode + Prüfziffer.
 """
 import argparse
@@ -32,6 +33,8 @@ COLUMNS = {
     'substance': [r'wirkstoff'],
     'atc': [r'^atc'],
     'use': [r'anwendungsgebiet arzneimittel', r'anwendungsgebiet'],
+    'holder': [r'zulassungsinhaber'],
+    'code': [r'heilmittelcode'],
 }
 
 
@@ -108,6 +111,8 @@ def convert(xlsx_bytes):
             cat if cat in 'ABCDE' else '',
             norm(get(row, 'atc')).upper().replace(' ', ''),
             norm(get(row, 'use'))[:160],
+            norm(get(row, 'holder'))[:80],
+            norm(get(row, 'code'))[:40],
         ]
     if len(out) < 1000:
         sys.exit('Nur %d Packungen gelesen, das ist zu wenig.' % len(out))
@@ -129,6 +134,7 @@ def main():
     with_atc = sum(1 for v in out.values() if v[5])
     with_use = sum(1 for v in out.values() if v[6])
     print('mit ATC-Code: %d, mit Anwendungsgebiet: %d' % (with_atc, with_use))
+    print('Heilmittelcodes:', sorted({v[8] for v in out.values()}))
     # Stichproben fürs Protokoll (Umgebungsvariable SAMPLE, z. B. "Iberogast|Dafalgan")
     import os
     if os.environ.get('SAMPLE'):

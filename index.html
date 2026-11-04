@@ -127,6 +127,16 @@
         </div>
       </div>
       <div class="card">
+        <h2>KI-Recherche (optional)</h2>
+        <p class="muted small">Mit einem eigenen Claude-API-Schlüssel recherchiert die App nach dem Fotografieren im Web und ergänzt Hersteller, Art (z. B. pflanzlich), Menge, Anwendung und Produktinfo.</p>
+        <p class="muted small">Dabei werden die Fotos an Anthropic geschickt. Die Kosten (meist wenige Rappen pro Produkt) gehen auf dein Anthropic-Konto. Der Schlüssel bleibt nur auf diesem Gerät und ist nicht in der Datensicherung enthalten. Einen Schlüssel erstellst du unter console.anthropic.com.</p>
+        <div class="row">
+          <input id="apiKey" type="password" placeholder="sk-ant-…" autocomplete="off">
+          <button id="btnSaveKey" class="btn">Speichern</button>
+        </div>
+        <p id="apiKeyState" class="small"></p>
+      </div>
+      <div class="card">
         <h2>Datensicherung</h2>
         <p class="muted">Deine Daten liegen nur auf diesem Gerät. Exportiere regelmässig eine Sicherung.</p>
         <div class="row">
@@ -167,7 +177,7 @@
       <div class="sheet-body">
         <div class="scanrow">
           <button type="button" id="btnScan" class="btn scan">▦ Strichcode scannen</button>
-          <button type="button" id="btnRecognize" class="btn scan alt">📷 Per Foto erkennen</button>
+          <button type="button" id="btnRecognize" class="btn scan alt">📷 Fotos aufnehmen</button>
         </div>
         <p id="scanInfo" class="scaninfo" hidden></p>
         <div id="suggestions" class="suggestions" hidden></div>
@@ -187,8 +197,19 @@
         <input type="hidden" name="substance">
         <input type="hidden" name="strength">
         <input type="hidden" name="atc">
-        <label>Standardanwendung
-          <textarea name="usage" rows="2" placeholder="Wird beim Scannen automatisch ergänzt, z. B. „Gegen Schmerzen und Fieber“"></textarea>
+        <div class="grid2">
+          <label>Hersteller
+            <input name="manufacturer" autocomplete="off" placeholder="z. B. Bayer">
+          </label>
+          <label>Art
+            <select name="productType" id="productTypeSelect"></select>
+          </label>
+        </div>
+        <label>Anwendung (allgemein)
+          <textarea name="usage" rows="2" placeholder="Wird automatisch ergänzt, z. B. „Gegen Schmerzen und Fieber“"></textarea>
+        </label>
+        <label>Produktinfo
+          <textarea name="info" rows="3" placeholder="Wichtigstes zum Produkt (wird bei der Recherche ergänzt)"></textarea>
         </label>
         <label>Darreichungsform
           <select name="form" id="formSelect"></select>
@@ -265,6 +286,27 @@
       </div>
       <button id="btnScanPhoto" class="btn wide">📷 Stattdessen Foto aufnehmen</button>
       <button id="btnScanClose" class="btn wide" autofocus>Schliessen</button>
+    </div>
+  </dialog>
+
+  <!-- Erfassen mit Fotos: zuerst die wichtigste Seite, dann weitere, dann „Abschliessen“ -->
+  <dialog id="captureDialog" class="scanner capture">
+    <div class="scan-wrap">
+      <video id="capVideo" muted playsinline></video>
+      <p id="capHint" class="cap-hint"></p>
+      <div id="capFlash" class="cap-flash"></div>
+    </div>
+    <div class="scan-foot">
+      <div id="capThumbs" class="cap-thumbs"></div>
+      <div class="cap-row">
+        <button type="button" id="capCancel" class="btn">Abbrechen</button>
+        <button type="button" id="capShoot" class="shutter" aria-label="Foto aufnehmen"></button>
+        <button type="button" id="capDone" class="btn primary" disabled>Abschliessen</button>
+      </div>
+      <div class="cap-links">
+        <label class="linkbtn">Fotos aus der Galerie<input id="capFile" type="file" accept="image/*" multiple hidden></label>
+        <button type="button" id="capManual" class="linkbtn">Ohne Fotos erfassen</button>
+      </div>
     </div>
   </dialog>
 
