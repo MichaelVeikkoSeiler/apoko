@@ -272,8 +272,8 @@ export function typeFromCode(code) {
   const c = String(code || '').toLowerCase();
   if (!c) return '';
   if (/phyto/.test(c)) return 'pflanzlich';
-  if (/homöo|homoeo|homéo|anthropo|komplement|complément|asiat|tcm|ayurved|spagyr|gemmo/.test(c)) return 'komplementaer';
-  if (/biotech|blut|sang|impf|vaccin|allergen|radio|transplant|zell|gen/.test(c)) return 'biologisch';
-  if (/synth|chem/.test(c)) return 'chemisch';
+  if (/homöo|homoeo|homéo|anthropo|komplement|complément|asiat|tibet|tcm|ayurved|spagyr|gemmo/.test(c)) return 'komplementaer';
+  if (/biotech|blut|sang|impf|vaccin|allergen|radio|transplant|zell|gen|immunolog|antiven|bakterien|hefe/.test(c)) return 'biologisch';
+  if (/synth|chem|antidot/.test(c)) return 'chemisch';
   return '';
 }
