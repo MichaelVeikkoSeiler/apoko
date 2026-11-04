@@ -87,6 +87,18 @@
     </section>
 
     <!-- Checkliste -->
+    <!-- Beschwerden -->
+    <section id="view-help" class="view" aria-label="Beschwerden">
+      <div class="card">
+        <h2>Was hast du für Beschwerden?</h2>
+        <p class="muted small">Die App sucht in deinem Vorrat, was passt. Keine Diagnose: Packungsbeilage beachten, im Zweifel Apotheke oder Ärztin fragen.</p>
+        <textarea id="complaint" rows="2" placeholder="z. B. Kopfweh und etwas Fieber"></textarea>
+        <div id="symptomChips" class="chips wrap"></div>
+      </div>
+      <div id="adviceResult"></div>
+      <p class="emergency small" id="emergency"></p>
+    </section>
+
     <section id="view-check" class="view" aria-label="Checkliste">
       <div class="card">
         <h2>Grundausstattung Hausapotheke</h2>
@@ -138,6 +150,7 @@
 
   <nav class="tabbar">
     <button class="tab active" data-view="inventory"><span>💊</span>Vorrat</button>
+    <button class="tab" data-view="help"><span>🩺</span>Beschwerden</button>
     <button class="tab" data-view="linked"><span>🏠</span>Verbunden</button>
     <button class="tab" data-view="check"><span>✅</span>Checkliste</button>
     <button class="tab" data-view="settings"><span>⚙️</span>Einstellungen</button>
@@ -173,6 +186,7 @@
         <!-- intern (für Suche und Checkliste), nicht angezeigt -->
         <input type="hidden" name="substance">
         <input type="hidden" name="strength">
+        <input type="hidden" name="atc">
         <label>Standardanwendung
           <textarea name="usage" rows="2" placeholder="Wird beim Scannen automatisch ergänzt, z. B. „Gegen Schmerzen und Fieber“"></textarea>
         </label>

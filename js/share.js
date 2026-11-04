@@ -32,7 +32,7 @@ export function sharedItems() {
     .map(i => ({
       i: i.id, n: i.name, w: i.substance || undefined, s: i.strength || undefined,
       f: i.form, q: i.remaining ?? i.quantity ?? undefined, u: i.unit,
-      e: expiryStatus(i).eff?.date, r: i.rx ? 1 : 0, c: i.category || undefined, a: i.usage || undefined,
+      e: expiryStatus(i).eff?.date, r: i.rx ? 1 : 0, c: i.category || undefined, a: i.usage || undefined, x: i.atc || undefined,
     }));
 }
 
@@ -68,7 +68,7 @@ export async function parseShareCode(input) {
       id: p.h, name: p.n || 'Haushalt', sharedAt: p.t,
       items: p.it.map(x => ({
         id: x.i, name: x.n, substance: x.w, strength: x.s, form: x.f,
-        quantity: x.q, unit: x.u, expiry: x.e, rx: !!x.r, category: x.c, usage: x.a,
+        quantity: x.q, unit: x.u, expiry: x.e, rx: !!x.r, category: x.c, usage: x.a, atc: x.x,
       })),
     };
   } catch {

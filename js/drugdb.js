@@ -80,6 +80,7 @@ function rowToFields(row, { withQuantity = true } = {}) {
     rx: category === 'A' || category === 'B' ? true : category ? false : null,
     // Einfache Erklärung nach ATC-Gruppe, sonst der Swissmedic-Text
     usage: simpleUsage(atc, use),
+    atc: String(atc || '').trim(),
   };
 }
 
