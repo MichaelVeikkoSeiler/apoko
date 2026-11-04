@@ -194,14 +194,9 @@
           </label>
         </div>
 
-        <div class="grid2">
-          <label>Ablaufdatum (Monat/Jahr) *
-            <input name="expiry" type="month" required placeholder="MM/JJJJ">
-          </label>
-          <label>Herstellung (Monat/Jahr)
-            <input name="prodDate" type="month" placeholder="MM/JJJJ">
-          </label>
-        </div>
+        <label>Ablaufdatum (Monat/Jahr) *
+          <input name="expiry" type="month" required placeholder="MM/JJJJ">
+        </label>
         <button type="button" id="btnExpiryPhoto" class="btn wide">📷 Ablaufdatum scannen</button>
         <input id="expiryInput" type="file" accept="image/*" capture="environment" hidden>
         <p id="expiryInfo" class="scaninfo" hidden></p>

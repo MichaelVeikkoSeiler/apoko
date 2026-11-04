@@ -5,11 +5,11 @@ Apoko ist eine Web-App (PWA) fürs Handy. Sie zeigt dir, welche Medikamente du z
 ## Funktionen
 
 - **Strichcode scannen** mit der Handykamera:
-  - **GS1-DataMatrix** (der quadratische Code auf CH/EU-Packungen): füllt GTIN, **Ablaufdatum**, **Herstelldatum** (falls vorhanden) und **Charge** automatisch aus.
+  - **GS1-DataMatrix** (der quadratische Code auf CH/EU-Packungen): füllt GTIN, **Ablaufdatum** und **Charge** automatisch aus.
   - **EAN-13**: füllt die GTIN aus. Bei Schweizer Arzneimitteln (7680…) zeigt die App die Swissmedic-Zulassungsnummer an.
   - Einmal erfasste Produkte merkt sich die App. Beim nächsten Scan derselben Packung sind Name, Wirkstoff, Form usw. schon ausgefüllt.
   - Ohne Kamera kann man den Code auch eintippen.
-- **Erfassen**: Name, Wirkstoff, Stärke, Darreichungsform, Packungsgrösse und Restmenge (Stück, ml, g, Dosen …), Ablauf- und Herstelldatum, Lagerort, Person, Charge, Notizen.
+- **Erfassen**: Name, Wirkstoff, Stärke, Darreichungsform, Packungsgrösse und Restmenge (Stück, ml, g, Dosen …), Ablaufdatum (Monat/Jahr), Lagerort, Person, Charge, Notizen.
 - **Ablaufdatum** nur als Monat/Jahr (gilt bis Monatsende), per Live-Kamera, Foto oder DataMatrix-Code.
 - **Rezeptpflicht**: Schalter „Rezeptpflichtig“, dazu optional die Schweizer Abgabekategorie (A/B = Rezept, D/E = rezeptfrei).
 - **Übersicht und Filter**: abgelaufen / läuft bald ab (unter 90 Tagen) / rezeptpflichtig / rezeptfrei / geteilt / nicht geteilt, dazu eine Volltextsuche.
