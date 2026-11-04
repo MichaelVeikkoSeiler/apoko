@@ -55,7 +55,7 @@ function showView(name) {
   if (name === 'linked') renderLinked();
   if (name === 'check') renderChecklist();
   if (name === 'help') renderHelp();
-  if (name === 'settings') renderLocationSettings();
+  if (name === 'settings') { renderLocationSettings(); renderPeople(); }
   window.scrollTo(0, 0);
 }
 $$('.tab').forEach(t => t.addEventListener('click', () => showView(t.dataset.view)));
@@ -266,7 +266,8 @@ $('#categorySelect').innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${
 function fillDatalists() {
   const { items } = store.getState();
   const uniq = key => [...new Set(items.map(i => i[key]).filter(Boolean))].sort();
-  $('#persons').innerHTML = uniq('person').map(v => `<option value="${esc(v)}">`).join('');
+  const names = [...new Set([...store.getState().people.map(p => p.label), ...uniq('person')])];
+  $('#persons').innerHTML = names.map(v => `<option value="${esc(v)}">`).join('');
   renderLocationChips();
 }
 
@@ -1100,43 +1101,85 @@ function renderSymptomChips(detected = []) {
     + (anyActive ? `<button type="button" class="chip" data-more>${showAllSymptoms ? '− weniger' : '＋ weitere'}</button>` : '');
 }
 
-function recRow(item, st, { linkedName = '', expired = false } = {}) {
+function recRow(item, st, { linkedName = '', expired = false, note = '', blocked = false } = {}) {
   const loc = [item.location && '📍 ' + item.location, item.person && '👤 für ' + item.person].filter(Boolean).join('  ');
   const keys = photoKeys(item);
   const thumb = item.imageUrl ? `<img class="thumb" src="${esc(item.imageUrl)}" alt="" referrerpolicy="no-referrer">`
     : keys[0] && !linkedName ? `<img class="thumb" data-photo="${esc(keys[0])}" alt="">`
     : `<span class="thumb">${FORM_ICON[item.form] || '📦'}</span>`;
   const sub = [item.usage, linkedName ? '🏠 ' + linkedName : loc, st && !expired ? describeDays(st.days) : ''].filter(Boolean).join(' · ');
-  return `<div class="rec${item.rx ? ' rx' : ''}${expired ? ' expired' : ''}" ${linkedName || expired ? '' : `data-open="${esc(item.id)}"`}>
-    ${thumb}<div class="txt"><strong>${esc(item.name)}</strong><small>${esc(sub)}</small></div></div>`;
+  const openable = !linkedName && !expired && !blocked;
+  return `<div class="rec${item.rx ? ' rx' : ''}${expired ? ' expired' : ''}${blocked ? ' blocked' : ''}" ${openable ? `data-open="${esc(item.id)}"` : ''}>
+    ${thumb}<div class="txt"><strong>${esc(item.name)}</strong><small>${esc(sub)}</small>${note ? `<span class="note">⚠️ ${esc(note)}</span>` : ''}</div></div>`;
+}
+
+// Ablauf: 1. Beschwerden → „Weiter: Für wen?“ → 2. Person wählen → 3. Empfehlung
+let helpStep = 'input';
+let helpPerson = null;
+
+const personText = p => `${p.age} J · ${p.weight} kg`;
+
+function currentSymptomIds() {
+  const detected = detectSymptoms($('#complaint').value);
+  return { detected, ids: [...new Set([...detected, ...pickedSymptoms])] };
 }
 
 function renderHelp() {
   const text = $('#complaint').value;
-  const detected = detectSymptoms(text);
+  const { detected, ids } = currentSymptomIds();
   renderSymptomChips(detected);
-  const ids = [...new Set([...detected, ...pickedSymptoms])];
-  const { items, linked } = store.getState();
   $('#emergency').textContent = EMERGENCY;
-  if (!ids.length) {
-    $('#adviceResult').innerHTML = text.trim()
-      ? '<p class="muted" style="text-align:center">Nicht erkannt. Tippe unten auf eine passende Beschwerde.</p>' : '';
+  if (!ids.length && helpStep !== 'input') helpStep = 'input';
+
+  const next = $('#btnHelpNext');
+  next.disabled = !ids.length;
+  next.parentElement.hidden = helpStep !== 'input';
+  next.textContent = ids.length ? `Weiter: Für wen? →` : 'Beschwerde eingeben oder antippen';
+
+  // Schritt 2: Person wählen
+  const people = store.getState().people;
+  $('#personPick').hidden = helpStep !== 'person';
+  $('#personButtons').innerHTML = people.map(p => `
+    <button type="button" class="person-btn" data-person="${esc(p.id)}">
+      <span class="pi">${p.icon || '🙂'}</span><strong>${esc(p.label)}</strong><small>${esc(personText(p))}${p.confirmed ? '' : ' · unbestätigt'}</small>
+    </button>`).join('');
+  $('#personUnconfirmed').hidden = people.every(p => p.confirmed);
+
+  if (helpStep !== 'result' || !helpPerson) {
+    $('#adviceResult').innerHTML = !ids.length && text.trim()
+      ? '<p class="muted" style="text-align:center">Nicht erkannt. Tippe oben auf eine passende Beschwerde.</p>' : '';
     return;
   }
-  const results = adviseFor(ids, items, store.expiryStatus);
+
+  // Schritt 3: Empfehlung für diese Person
+  const person = people.find(p => p.id === helpPerson) || people[0];
+  const { items, linked } = store.getState();
+  const results = adviseFor(ids, items, store.expiryStatus, person);
   const linkedItems = linked.flatMap(h => h.items.map(i => ({ ...i, _hh: h.name })));
-  const linkedResults = adviseFor(ids, linkedItems, store.expiryStatus);
-  $('#adviceResult').innerHTML = `<p class="hint small">Dosierung immer nach Packungsbeilage. Bei Kindern, in der Schwangerschaft, mit Dauermedikamenten oder Vorerkrankungen zuerst in der Apotheke fragen.</p>`
+  const linkedResults = adviseFor(ids, linkedItems, store.expiryStatus, person);
+  const kid = person.age < 12;
+  $('#adviceResult').innerHTML = `
+    <div class="card for-person">
+      <div><strong>Für: ${person.icon || ''} ${esc(person.label)}</strong><br><small class="muted">${esc(personText(person))}${person.confirmed ? '' : ' · Angaben unbestätigt'}</small></div>
+      <div class="row" style="margin:0"><button type="button" class="btn small-btn" data-help="person">Andere Person</button><button type="button" class="btn small-btn" data-help="new">Neu</button></div>
+    </div>
+    <p class="hint small">${kid
+      ? `Kind mit ${esc(String(person.weight))} kg: Nur Mittel verwenden, die für dieses Alter zugelassen sind, Dosierung nach Gewicht laut Packungsbeilage. Im Zweifel Apotheke oder Kinderarzt fragen.`
+      : 'Dosierung immer nach Packungsbeilage. In der Schwangerschaft, mit Dauermedikamenten oder Vorerkrankungen zuerst in der Apotheke fragen.'}</p>`
     + results.map((r, n) => {
       const s = r.symptom;
-      const fromLinked = linkedResults[n].use.filter(h => !h.item.rx);
+      const fromLinked = linkedResults[n].use;
+      const row = (h, o = {}) => recRow(h.item, h.st, { note: h.check.note, ...o });
       return `<div class="card advice">
         <h2>${s.icon} ${esc(s.label)}</h2>
         <div class="redflag"><strong>⚠️ Sofort ärztliche Hilfe oder 144 bei:</strong>${esc(s.red)}</div>
-        ${r.use.length ? `<h3>✅ Passt aus deinem Vorrat</h3>${r.use.map(h => recRow(h.item, h.st)).join('')}` : ''}
-        ${r.rx.length ? `<h3>℞ Rezeptpflichtig: nur verwenden, wenn für dich verschrieben</h3>${r.rx.map(h => recRow(h.item, h.st)).join('')}` : ''}
-        ${!r.use.length && !r.rx.length ? `<div class="none">Nichts Passendes im Haus. In der Apotheke nach ${esc(s.ask)} fragen.</div>` : ''}
-        ${!r.use.length && fromLinked.length ? `<h3>🏠 Bei verbundenen Haushalten</h3>${fromLinked.map(h => recRow(h.item, h.st, { linkedName: h.item._hh })).join('')}` : ''}
+        ${r.use.length ? `<h3>✅ Passt aus deinem Vorrat</h3>${r.use.map(h => row(h)).join('')}` : ''}
+        ${r.rx.length ? `<h3>℞ Für ${esc(person.label)} verschrieben</h3>${r.rx.map(h => row(h)).join('')}` : ''}
+        ${!r.use.length && !r.rx.length ? `<div class="none">Nichts Passendes für ${esc(person.label)} im Haus. In der Apotheke nach ${esc(s.ask)} fragen${kid ? ' (für Kinder)' : ''}.</div>` : ''}
+        ${!r.use.length && fromLinked.length ? `<h3>🏠 Bei verbundenen Haushalten</h3>${fromLinked.map(h => row(h, { linkedName: h.item._hh })).join('')}` : ''}
+        ${r.caution.length ? `<h3>⚠️ Eher nicht für ${esc(person.label)}</h3>${r.caution.map(h => recRow(h.item, h.st, { note: h.check.caution })).join('')}` : ''}
+        ${r.blocked.length ? `<h3>⛔ Nicht für ${esc(person.label)}</h3>${r.blocked.map(h => recRow(h.item, h.st, { note: h.check.block, blocked: true })).join('')}` : ''}
+        ${r.rxOther.length ? `<h3>℞ Rezeptpflichtig, nicht für ${esc(person.label)} verschrieben</h3>${r.rxOther.map(h => recRow(h.item, h.st, { note: 'Nicht ohne ärztliche Rücksprache verwenden.', blocked: true })).join('')}` : ''}
         ${r.expired.length ? `<h3>🗑️ Abgelaufen, nicht mehr verwenden</h3>${r.expired.map(h => recRow(h.item, h.st, { expired: true })).join('')}<p class="muted small">Abgelaufene Medikamente in der Apotheke zurückgeben.</p>` : ''}
         <p class="tip">💡 ${esc(s.tip)}</p>
       </div>`;
@@ -1147,8 +1190,13 @@ function renderHelp() {
   });
 }
 
+function backToInput() { helpStep = 'input'; renderHelp(); }
+
 let helpTimer;
-$('#complaint').addEventListener('input', () => { clearTimeout(helpTimer); helpTimer = setTimeout(renderHelp, 250); });
+$('#complaint').addEventListener('input', () => {
+  clearTimeout(helpTimer);
+  helpTimer = setTimeout(() => { if (helpStep !== 'input') helpStep = 'input'; renderHelp(); }, 250);
+});
 $('#symptomChips').addEventListener('click', e => {
   if (e.target.closest('[data-more]')) { showAllSymptoms = !showAllSymptoms; return renderHelp(); }
   const b = e.target.closest('[data-sym]');
@@ -1156,11 +1204,53 @@ $('#symptomChips').addEventListener('click', e => {
   const id = b.dataset.sym;
   if (detectSymptoms($('#complaint').value).includes(id)) return; // kommt aus dem Text
   pickedSymptoms.has(id) ? pickedSymptoms.delete(id) : pickedSymptoms.add(id);
+  helpStep = 'input';
   renderHelp();
 });
+$('#btnHelpNext').addEventListener('click', () => {
+  if (!currentSymptomIds().ids.length) return;
+  helpStep = 'person';
+  renderHelp();
+  $('#personPick').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('#personButtons').addEventListener('click', e => {
+  const b = e.target.closest('[data-person]');
+  if (!b) return;
+  helpPerson = b.dataset.person;
+  helpStep = 'result';
+  renderHelp();
+  $('#adviceResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 $('#adviceResult').addEventListener('click', e => {
+  const act = e.target.closest('[data-help]')?.dataset.help;
+  if (act === 'person') { helpStep = 'person'; renderHelp(); return $('#personPick').scrollIntoView({ behavior: 'smooth' }); }
+  if (act === 'new') {
+    $('#complaint').value = ''; pickedSymptoms.clear(); helpPerson = null;
+    backToInput(); window.scrollTo({ top: 0, behavior: 'smooth' }); return;
+  }
   const r = e.target.closest('[data-open]');
   if (r) openItem(store.getState().items.find(i => i.id === r.dataset.open));
+});
+
+// ---------- Personen (Einstellungen) ----------
+function renderPeople() {
+  $('#peopleList').innerHTML = store.getState().people.map(p => `
+    <div class="person-row" data-pid="${esc(p.id)}">
+      <span class="pi">${p.icon || '🙂'}</span>
+      <input data-f="label" value="${esc(p.label)}" aria-label="Bezeichnung">
+      <input data-f="age" type="number" step="0.5" min="0" max="120" inputmode="decimal" value="${esc(String(p.age))}" aria-label="Alter in Jahren" title="Alter (Jahre)">
+      <input data-f="weight" type="number" step="0.5" min="1" max="300" inputmode="decimal" value="${esc(String(p.weight))}" aria-label="Gewicht in kg" title="Gewicht (kg)">
+      <label class="conf"><input type="checkbox" data-f="confirmed" ${p.confirmed ? 'checked' : ''}> Jahre / kg ${p.confirmed ? 'bestätigt' : 'noch nicht bestätigt'}</label>
+    </div>`).join('');
+}
+$('#peopleList').addEventListener('change', e => {
+  const row = e.target.closest('[data-pid]');
+  const f = e.target.dataset.f;
+  if (!row || !f) return;
+  const v = f === 'confirmed' ? e.target.checked : f === 'label' ? e.target.value.trim() || 'Person' : Number(e.target.value);
+  store.updatePerson(row.dataset.pid, { [f]: v });
+  renderPeople();
+  toast('Gespeichert');
 });
 
 // ---------- Checkliste ----------

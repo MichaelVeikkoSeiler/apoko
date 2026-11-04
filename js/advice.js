@@ -231,16 +231,77 @@ export function matchScore(item, symptom) {
  * Ergebnis pro Beschwerde:
  * { symptom, use: [...], rx: [...], expired: [...] } jeweils { item, score }
  */
-export function adviseFor(symptomIds, items, expiryStatus) {
+// ---- Personen ----
+
+/** Voreinstellung (vom Nutzer genannt, noch nicht bestätigt). */
+export const DEFAULT_PEOPLE = [
+  { id: 'mann', label: 'Mann', icon: '👨', age: 45, weight: 90, confirmed: false },
+  { id: 'frau', label: 'Frau', icon: '👩', age: 45, weight: 60, confirmed: false },
+  { id: 'kind1', label: 'Kind 1', icon: '🧒', age: 7.5, weight: 25, confirmed: false },
+  { id: 'kind2', label: 'Kind 2', icon: '👧', age: 4.5, weight: 18, confirmed: false },
+];
+
+const sameName = (a, b) => norm(a).trim() === norm(b).trim();
+
+/** Stärke in mg aus Name/Stärke, z. B. „Dafalgan 500 mg“ -> 500, „1 g“ -> 1000. */
+function strengthMg(item) {
+  const t = norm(`${item.strength || ''} ${item.name || ''}`);
+  const m = /(\d+(?:[.,]\d+)?)\s*(mg|g)\b/.exec(t);
+  if (!m) return null;
+  const v = parseFloat(m[1].replace(',', '.'));
+  return m[2] === 'g' ? v * 1000 : v;
+}
+
+/**
+ * Passt ein Artikel zu dieser Person? Gut belegte Grundregeln, keine Dosierung.
+ * Liefert { block: Grund } (nicht verwenden), { caution: Grund } (eher nicht), { note: Hinweis } oder {}.
+ */
+export function personCheck(item, person) {
+  if (!person) return {};
+  const hay = norm([item.name, item.substance, item.usage].join(' '));
+  const atc = String(item.atc || '').toUpperCase();
+  const age = Number(person.age), kg = Number(person.weight);
+  const kid = age < 12, under16 = age < 16;
+
+  if (under16 && (atc.startsWith('N02BA') || atc.startsWith('B01AC06') || /acetylsalicyl|aspirin/.test(hay)))
+    return { block: 'Acetylsalicylsäure (z. B. Aspirin) nicht für Kinder und Jugendliche unter 16 Jahren (Gefahr Reye-Syndrom).' };
+  if (kid && (atc.startsWith('A07DA') || /loperamid|imodium/.test(hay)))
+    return { block: 'Loperamid (z. B. Imodium) nicht für Kinder unter 12 Jahren ohne ärztliche Verordnung.' };
+  if (kid && /codein|codeine|tramadol/.test(hay))
+    return { block: 'Codein und ähnliche Opioide nicht für Kinder unter 12 Jahren.' };
+  if (!kid) return {};
+
+  const mg = strengthMg(item);
+  if (/paracetamol|dafalgan|panadol|acetaminophen/.test(hay) && mg >= 500 && kg < 34)
+    return { caution: `Erwachsenenstärke (${mg} mg): für ${kg} kg meist zu hoch. Kinderpräparat (Sirup, Zäpfchen) verwenden oder in der Apotheke fragen.` };
+  if (/ibuprofen|algifor|brufen/.test(hay) && mg >= 400 && kg < 40)
+    return { caution: `Erwachsenenstärke (${mg} mg): für ${kg} kg meist zu hoch. Kinderpräparat verwenden oder in der Apotheke fragen.` };
+  if ((atc.startsWith('R01AA') || /xylometazolin|oxymetazolin/.test(hay)) && !/kind|junior|baby|0[.,]05/.test(hay))
+    return { note: 'Für Kinder nur Nasenspray in Kinderstärke verwenden.' };
+  return { note: `Für Kinder: ab welchem Alter erlaubt und Dosierung nach Gewicht (${kg} kg) in der Packungsbeilage prüfen.` };
+}
+
+/**
+ * Ergebnis pro Beschwerde (optional für eine Person):
+ * use: passt · caution: eher nicht (z. B. Erwachsenenstärke bei Kindern) · blocked: nicht für diese Person · rx: rezeptpflichtig, für diese Person verschrieben
+ * rxOther: rezeptpflichtig, nicht (nachweislich) für diese Person · expired: abgelaufen
+ * Jeder Treffer: { item, score, st, check }
+ */
+export function adviseFor(symptomIds, items, expiryStatus, person = null) {
   return symptomIds.map(id => SYMPTOMS.find(s => s.id === id)).filter(Boolean).map(symptom => {
     const hits = items
-      .map(item => ({ item, score: matchScore(item, symptom), st: expiryStatus(item) }))
+      .map(item => ({ item, score: matchScore(item, symptom), st: expiryStatus(item), check: personCheck(item, person) }))
       .filter(h => h.score > 0)
       .sort((a, b) => b.score - a.score || (a.st.days ?? 1e9) - (b.st.days ?? 1e9));
+    const valid = hits.filter(h => h.st.status !== 'expired');
+    const mine = h => person && h.item.person && sameName(h.item.person, person.label);
     return {
       symptom,
-      use: hits.filter(h => h.st.status !== 'expired' && !h.item.rx),
-      rx: hits.filter(h => h.st.status !== 'expired' && h.item.rx),
+      use: valid.filter(h => !h.item.rx && !h.check.block && !h.check.caution),
+      caution: valid.filter(h => !h.item.rx && h.check.caution),
+      blocked: valid.filter(h => h.check.block),
+      rx: valid.filter(h => h.item.rx && !h.check.block && (person ? mine(h) : true)),
+      rxOther: person ? valid.filter(h => h.item.rx && !h.check.block && !mine(h)) : [],
       expired: hits.filter(h => h.st.status === 'expired'),
     };
   });

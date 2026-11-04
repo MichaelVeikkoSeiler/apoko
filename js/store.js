@@ -1,6 +1,7 @@
 // Lokale Datenhaltung (localStorage). Alles bleibt auf dem Gerät.
 import { normalizeGtin } from './gs1.js';
 import { SOON_DAYS } from './knowledge.js';
+import { DEFAULT_PEOPLE } from './advice.js';
 
 const KEY = 'apoko.v1';
 
@@ -10,11 +11,13 @@ const empty = () => ({
   catalog: {},   // GTIN -> zuletzt erfasste Produktdaten (für Autovervollständigung)
   linked: [],    // verbundene Haushalte: { id, name, importedAt, sharedAt, items[] }
   locations: [], // gespeicherte Standorte (Lagerorte)
+  people: DEFAULT_PEOPLE.map(p => ({ ...p })), // Personen im Haushalt (Alter, Gewicht)
 });
 
 /** Ältere Daten: Standorte aus den vorhandenen Artikeln übernehmen. */
 function migrate(s) {
   if (!Array.isArray(s.locations)) s.locations = [];
+  if (!Array.isArray(s.people) || !s.people.length) s.people = DEFAULT_PEOPLE.map(p => ({ ...p }));
   for (const it of s.items || []) {
     const loc = (it.location || '').trim();
     if (loc && !s.locations.some(l => l.toLowerCase() === loc.toLowerCase())) s.locations.push(loc);
@@ -53,6 +56,14 @@ export const getState = () => state;
 
 export function setHouseholdName(name) {
   state.household.name = name.trim() || 'Mein Haushalt';
+  save();
+}
+
+// ---- Personen ----
+export function updatePerson(id, patch) {
+  const p = state.people.find(x => x.id === id);
+  if (!p) return;
+  Object.assign(p, patch);
   save();
 }
 
@@ -133,7 +144,7 @@ export function exportBackup() {
 export function importBackup(json) {
   const data = JSON.parse(json);
   if (data.app !== 'apoko' || !Array.isArray(data.items)) throw new Error('Keine gültige Apoko-Sicherung.');
-  state = migrate({ ...empty(), household: data.household, items: data.items, catalog: data.catalog || {}, linked: data.linked || [], locations: data.locations });
+  state = migrate({ ...empty(), household: data.household, items: data.items, catalog: data.catalog || {}, linked: data.linked || [], locations: data.locations, people: data.people });
   save();
 }
 

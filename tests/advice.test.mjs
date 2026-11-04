@@ -47,3 +47,30 @@ test('Ohne ATC: Treffer über Anwendung', () => {
 test('Jede Beschwerde hat Warnzeichen, Tipp und Apotheken-Hinweis', () => {
   for (const s of SYMPTOMS) assert.ok(s.red && s.tip && s.ask && s.syn.length && s.atc.length, s.id);
 });
+
+import { personCheck, DEFAULT_PEOPLE } from '../js/advice.js';
+const [mann, frau, kind1, kind2] = DEFAULT_PEOPLE;
+
+test('Personen: Aspirin nicht unter 16, Loperamid nicht unter 12', () => {
+  const asp = { name: 'Aspirin-C', atc: 'N02BA51' };
+  const imo = { name: 'Imodium', atc: 'A07DA03' };
+  assert.equal(personCheck(asp, mann).block, undefined);
+  assert.ok(personCheck(asp, kind1).block);
+  assert.ok(personCheck(imo, kind2).block);
+  assert.equal(personCheck(imo, frau).block, undefined);
+});
+
+test('Kinder: Erwachsenenstärke markiert, sonst allgemeiner Hinweis', () => {
+  assert.match(personCheck({ name: 'Dafalgan 500 mg, Tabletten', atc: 'N02BE01' }, kind1).caution, /Erwachsenenstärke/);
+  assert.match(personCheck({ name: 'Algifor Junior Sirup 100 mg/5 ml', atc: 'M01AE01' }, kind2).note, /Packungsbeilage/);
+  assert.deepEqual(personCheck({ name: 'Dafalgan 500 mg', atc: 'N02BE01' }, mann), {});
+});
+
+test('Rezeptpflichtig: nur für die verschriebene Person', () => {
+  const ibu = { id: 9, name: 'Ibuprofen 600 mg', atc: 'M01AE01', rx: true, person: 'Mann', expiry: '2028-01-31' };
+  const [rMann] = adviseFor(['kopf'], [ibu], st, mann);
+  const [rFrau] = adviseFor(['kopf'], [ibu], st, frau);
+  assert.equal(rMann.rx.length, 1);
+  assert.equal(rFrau.rx.length, 0);
+  assert.equal(rFrau.rxOther.length, 1);
+});
