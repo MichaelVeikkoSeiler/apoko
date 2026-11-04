@@ -2,7 +2,8 @@ import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
 import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, formById } from './knowledge.js';
 import * as store from './store.js';
 import { startScanner } from './scanner.js';
-import { lookupSwissDrug, searchByText } from './drugdb.js';
+import { lookupSwissDrug, searchByText, guessForm } from './drugdb.js';
+import { lookupOpenProduct } from './productdb.js';
 import * as photos from './photos.js';
 import { recognizeText } from './ocr.js';
 import { buildShareCode, shareLink, parseShareCode, sharedItems } from './share.js';
@@ -189,6 +190,20 @@ F.rx.addEventListener('change', () => {
   updateRxWarn();
 });
 F.shared.addEventListener('change', updateRxWarn);
+
+// Form aus dem Namen ableiten (z. B. „Pflaster“, „Verband“), solange noch die Voreinstellung gewählt ist
+let formTouched = false;
+F.form.addEventListener('input', () => { formTouched = true; });
+function autoFormFromName() {
+  if (formTouched) return;
+  const f = guessForm(F.name.value);
+  if (f && f !== F.form.value) {
+    F.form.value = f;
+    F.unit.value = formById(f).unit;
+    updateFormHint();
+  }
+}
+F.name.addEventListener('change', autoFormFromName);
 F.openedAt.addEventListener('change', () => {
   if (F.openedAt.value && !F.openDays.value) {
     const f = formById(F.form.value);
@@ -232,6 +247,7 @@ function openItem(item) {
   $('#scanInfo').hidden = true;
   $('#suggestions').hidden = true;
   pendingPhoto = undefined;
+  formTouched = !!item;
   showPhoto(null);
   if (item?.hasPhoto) photos.photoUrl(item.id).then(url => { if (pendingPhoto === undefined) showPhoto(url); });
   const isNew = !item;
@@ -341,7 +357,18 @@ async function applyScan(raw) {
         info.push(`Swissmedic-Nr. ${sm.authNo}, nicht in der Liste gefunden: Name bitte eintippen`);
       }
     } else {
-      info.push('Unbekanntes Produkt: Name bitte eintippen (wird für den nächsten Scan gemerkt)');
+      $('#scanInfo').hidden = false;
+      $('#scanInfo').textContent = 'Suche in offenen Produktdatenbanken …';
+      const prod = await lookupOpenProduct(r.gtin);
+      if (prod) {
+        fill({ name: prod.name, quantity: prod.quantity });
+        const form = guessForm(prod.name);
+        if (form) { F.form.value = form; F.unit.value = formById(form).unit; }
+        if (prod.unit) F.unit.value = prod.unit;
+        info.push('Gefunden in Open Products Facts, bitte kontrollieren');
+      } else {
+        info.push('Kein Arzneimittel und in keiner Datenbank gefunden: Name bitte einmal eintippen, beim nächsten Scan kennt die App das Produkt');
+      }
     }
   }
   if (r.pzn) info.push(`PZN ${r.pzn}`);
@@ -390,11 +417,28 @@ function renderSuggestions(hits, text) {
   const box = $('#suggestions');
   box.hidden = false;
   if (!hits.length) {
-    const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 80);
-    info.textContent = snippet
-      ? `Kein passendes Medikament gefunden. Gelesen: „${snippet}“. Tipp: Den Namen nah und scharf fotografieren.`
-      : 'Kein Text erkannt. Tipp: Bei gutem Licht, ohne Spiegelung, nah an den aufgedruckten Namen gehen.';
-    box.innerHTML = TABLET_NOTE;
+    // Kein Arzneimittel gefunden (z. B. Pflaster): gelesene Zeilen als Namen anbieten
+    const lines = [...new Set(text.split('\n')
+      .map(l => l.replace(/[|_~®™•]+/g, ' ').replace(/\s+/g, ' ').trim())
+      .filter(l => l.length >= 4 && l.length <= 50 && (l.match(/[a-zäöüéèà]/gi) || []).length / l.length > 0.6))]
+      .slice(0, 6);
+    if (!lines.length) {
+      info.textContent = 'Kein Text erkannt. Tipp: Bei gutem Licht, ohne Spiegelung, nah an den aufgedruckten Namen gehen.';
+      box.innerHTML = TABLET_NOTE;
+      return;
+    }
+    info.textContent = 'Kein Arzneimittel aus der Swissmedic-Liste. Gelesenen Text als Namen übernehmen?';
+    box.innerHTML = lines.map((l, i) => `<button type="button" class="suggestion" data-line="${i}"><strong>${esc(l)}</strong></button>`).join('')
+      + '<p>Mehrere antippen, um sie zu kombinieren (z. B. Marke + Produkt).</p>';
+    box.onclick = ev => {
+      const b = ev.target.closest('[data-line]');
+      if (!b) return;
+      const l = lines[+b.dataset.line];
+      F.name.value = F.name.value ? `${F.name.value} ${l}` : l;
+      b.classList.add('picked');
+      autoFormFromName();
+      info.textContent = '✓ Als Name übernommen. Bei Bedarf noch anpassen.';
+    };
     return;
   }
   info.textContent = `${hits.length === 1 ? '1 Vorschlag' : hits.length + ' Vorschläge'}: bitte den richtigen antippen und kontrollieren.`;
