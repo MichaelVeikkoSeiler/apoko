@@ -26,6 +26,33 @@ async function nativeDetector() {
   } catch { return null; }
 }
 
+/** Startet die Rückkamera für Fotos. Liefert { stop, takePhoto }. */
+export async function startCamera(video) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('Kamera ist in diesem Browser nicht verfügbar.');
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false,
+  });
+  video.srcObject = stream;
+  video.setAttribute('playsinline', '');
+  await video.play();
+  const track = stream.getVideoTracks()[0];
+  const imageCapture = 'ImageCapture' in window ? new ImageCapture(track) : null;
+
+  async function takePhoto() {
+    // Volle Sensorauflösung (Android/Chrome), sonst das aktuelle Videobild
+    if (imageCapture) {
+      try { return await imageCapture.takePhoto(); } catch { /* weiter mit Videobild */ }
+    }
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth; c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video, 0, 0);
+    return new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+  }
+  return { stop: () => { stream.getTracks().forEach(t => t.stop()); video.srcObject = null; }, takePhoto };
+}
+
 /**
  * Sucht einen Strichcode/DataMatrix-Code in einem Foto (Blob).
  * Liefert den Text des Codes oder null.

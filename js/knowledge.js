@@ -253,3 +253,27 @@ export function looksFrench(text) {
   if (/[äöüß]/i.test(t)) return false;
   return /[éèêàçùâî]|\b(des|du|pour|les|la|le|et|en|peau|plaies|douleurs|traitement|soigner)\b/i.test(t);
 }
+
+/** Art des Produkts (Feld „Art“). */
+export const PRODUCT_TYPES = [
+  { id: '', label: 'unbekannt' },
+  { id: 'chemisch', label: 'Arzneimittel (chemisch-synthetisch)' },
+  { id: 'pflanzlich', label: '🌿 Pflanzliches Arzneimittel' },
+  { id: 'komplementaer', label: 'Homöopathisch / Komplementärmedizin' },
+  { id: 'biologisch', label: 'Biologisch (z. B. Impfstoff, Insulin)' },
+  { id: 'medizinprodukt', label: 'Medizinprodukt (z. B. Pflaster, Thermometer)' },
+  { id: 'nahrung', label: 'Nahrungsergänzung / Vitamine' },
+  { id: 'pflege', label: 'Pflege / Kosmetik' },
+  { id: 'andere', label: 'Andere' },
+];
+
+/** Heilmittelcode der Swissmedic-Liste -> Art. */
+export function typeFromCode(code) {
+  const c = String(code || '').toLowerCase();
+  if (!c) return '';
+  if (/phyto/.test(c)) return 'pflanzlich';
+  if (/homöo|homoeo|homéo|anthropo|komplement|complément|asiat|tcm|ayurved|spagyr|gemmo/.test(c)) return 'komplementaer';
+  if (/biotech|blut|sang|impf|vaccin|allergen|radio|transplant|zell|gen/.test(c)) return 'biologisch';
+  if (/synth|chem/.test(c)) return 'chemisch';
+  return '';
+}
