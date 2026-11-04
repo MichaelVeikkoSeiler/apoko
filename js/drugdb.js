@@ -13,6 +13,8 @@ function loadDb() {
 }
 
 const FORM_RULES = [
+  [/pflaster|plaster|verband|kompresse|binde\b|gaze|cerott|pansement|wundauflage/i, 'pflaster'],
+  [/thermometer|pinzette|zecken|schere|handschuh|kühlkompresse|coolpack/i, 'medizinprodukt'],
   [/brause/i, 'brausetablette'],
   [/lutsch|pastill/i, 'lutschtablette'],
   [/augentropfen|augen.*tropfen|gtt\.? opht|augen/i, 'augentropfen'],
@@ -32,7 +34,7 @@ const FORM_RULES = [
   [/tinktur|lösung|loesung|desinf/i, 'loesung'],
 ];
 
-function guessForm(text) {
+export function guessForm(text) {
   for (const [rx, id] of FORM_RULES) if (rx.test(text)) return id;
   return null;
 }
