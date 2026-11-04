@@ -2,7 +2,7 @@
 // data/swissmedic.json wird beim Veröffentlichen (GitHub Actions) frisch erzeugt
 // und erst beim ersten Scan eines Schweizer Arzneimittels geladen.
 import { swissmedicInfo } from './gs1.js';
-import { useFromAtc } from './knowledge.js';
+import { useFromAtc, looksFrench, ATC_GROUPS } from './knowledge.js';
 
 let dbPromise = null;
 
@@ -57,6 +57,15 @@ function extractStrength(name) {
 
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
+/** Einfache Anwendung: ATC-Übersetzung, sonst deutscher Swissmedic-Text, sonst grobe Gruppe. */
+function simpleUsage(atc, use) {
+  const text = String(use || '').replace(/\s+/g, ' ').trim();
+  return useFromAtc(atc)
+    || (text && !looksFrench(text) ? cap(text) : '')
+    || ATC_GROUPS[String(atc || '').trim().charAt(0).toUpperCase()]
+    || '';
+}
+
 function rowToFields(row, { withQuantity = true } = {}) {
   const [name, substance, size, unit, category, atc, use] = row;
   const qty = typeof size === 'number' ? size : parseFloat(String(size).replace(',', '.'));
@@ -70,7 +79,7 @@ function rowToFields(row, { withQuantity = true } = {}) {
     category: ['A', 'B', 'D', 'E'].includes(category) ? category : '',
     rx: category === 'A' || category === 'B' ? true : category ? false : null,
     // Einfache Erklärung nach ATC-Gruppe, sonst der Swissmedic-Text
-    usage: useFromAtc(atc) || cap(String(use || '').replace(/\s+/g, ' ').trim()),
+    usage: simpleUsage(atc, use),
   };
 }
 
