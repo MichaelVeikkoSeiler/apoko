@@ -354,3 +354,24 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .cap-links { display: flex; justify-content: space-between; margin-top: 10px; }
 .cap-links .linkbtn { color: #9fe3da; font-size: .85rem; }
 .scan-foot .btn.primary:not(:disabled) { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* Beschwerden: Weiter-Knopf und Personenwahl */
+.help-next { position: sticky; bottom: calc(76px + env(safe-area-inset-bottom)); padding: 8px 0; z-index: 3; }
+.help-next .btn { min-height: 52px; font-size: 1.05rem; font-weight: 600; box-shadow: 0 4px 14px rgb(0 0 0 / .18); }
+.help-next .btn:disabled { opacity: .5; box-shadow: none; }
+.person-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.person-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.person-btn .pi { font-size: 2rem; }
+.person-btn small { color: var(--muted); }
+.person-btn.active { border-color: var(--primary); background: var(--primary-soft); }
+.for-person { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.for-person strong { font-size: 1rem; }
+.rec .note { display: block; color: var(--warn); font-size: .8rem; margin-top: 2px; }
+.rec.blocked { border-color: var(--danger); background: var(--danger-soft); cursor: default; }
+.rec.blocked .note { color: var(--danger); }
+.person-row { display: grid; grid-template-columns: 2rem 1fr 4.5rem 4.5rem; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.person-row:last-child { border-bottom: 0; }
+.person-row input { min-height: 38px; padding: 6px 8px; }
+.person-row .pi { font-size: 1.5rem; text-align: center; }
+.person-row .conf { grid-column: 2 / -1; font-size: .8rem; color: var(--muted); display: flex; align-items: center; gap: 6px; margin: 0; }
+.person-row .conf input { width: 18px; height: 18px; min-height: 0; }
