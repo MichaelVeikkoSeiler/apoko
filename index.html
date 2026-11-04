@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Apoko Hausapotheke</title>
+  <meta name="description" content="Deine Hausapotheke: Medikamente scannen, Ablaufdaten im Blick, mit anderen Haushalten teilen.">
+  <meta name="theme-color" content="#0f766e">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon.svg" alt="" width="28" height="28">
+      <div>
+        <h1>Apoko</h1>
+        <p id="householdLabel" class="muted small"></p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Vorrat -->
+    <section id="view-inventory" class="view active" aria-label="Vorrat">
+      <div id="alerts"></div>
+      <div class="stats" id="stats"></div>
+      <div class="searchbar">
+        <input id="search" type="search" placeholder="Suchen: Name, Wirkstoff, Lagerort …" autocomplete="off">
+      </div>
+      <div class="chips" id="filters" role="tablist">
+        <button class="chip active" data-filter="all">Alle</button>
+        <button class="chip" data-filter="soon">Läuft bald ab</button>
+        <button class="chip" data-filter="expired">Abgelaufen</button>
+        <button class="chip" data-filter="rx">Rezeptpflichtig</button>
+        <button class="chip" data-filter="otc">Rezeptfrei</button>
+        <button class="chip" data-filter="shared">Geteilt</button>
+        <button class="chip" data-filter="private">Nicht geteilt</button>
+      </div>
+      <ul id="itemList" class="list"></ul>
+      <div id="emptyState" class="empty" hidden>
+        <p class="big">💊</p>
+        <p><strong>Noch nichts erfasst.</strong></p>
+        <p class="muted">Tippe auf <b>+ Erfassen</b> und scanne den Strichcode auf der Packung.</p>
+      </div>
+    </section>
+
+    <!-- Verbunden -->
+    <section id="view-linked" class="view" aria-label="Verbunden">
+      <div class="card">
+        <h2>Meinen Vorrat teilen</h2>
+        <p class="muted">Geteilt werden nur Artikel, bei denen „Mit verbundenen Haushalten teilen“ aktiv ist. Abgelaufene Artikel und Notizen werden nie geteilt.</p>
+        <p id="shareCount" class="small"></p>
+        <div class="row">
+          <button id="btnShare" class="btn primary">Teilen-Code erstellen</button>
+        </div>
+        <div id="sharePanel" hidden>
+          <div id="qr" class="qr"></div>
+          <div class="row">
+            <button id="btnShareNative" class="btn">Link senden …</button>
+            <button id="btnCopy" class="btn">Link kopieren</button>
+          </div>
+          <p class="muted small">Der Code ist eine Momentaufnahme. Wenn sich dein Vorrat ändert, erstelle ihn neu und sende ihn noch einmal.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Haushalt verbinden</h2>
+        <p class="muted">Scanne den QR-Code eines anderen Haushalts oder füge seinen Link ein.</p>
+        <div class="row">
+          <button id="btnJoinScan" class="btn primary">QR-Code scannen</button>
+        </div>
+        <div class="row">
+          <input id="joinCode" type="text" placeholder="Link oder Code einfügen" autocomplete="off">
+          <button id="btnJoin" class="btn">Verbinden</button>
+        </div>
+      </div>
+
+      <div class="searchbar">
+        <input id="linkedSearch" type="search" placeholder="Wer hat …? (z. B. Ibuprofen)" autocomplete="off">
+      </div>
+      <div id="linkedList"></div>
+    </section>
+
+    <!-- Checkliste -->
+    <section id="view-check" class="view" aria-label="Checkliste">
+      <div class="card">
+        <h2>Grundausstattung Hausapotheke</h2>
+        <p class="muted">Abgleich mit deinem Vorrat (ohne abgelaufene Artikel). Die Liste ist ein Vorschlag. Bei Kleinkindern, chronischen Krankheiten oder vor Reisen frag in der Apotheke, was du zusätzlich brauchst.</p>
+        <ul id="checklist" class="checklist"></ul>
+      </div>
+      <div class="card" id="tips"></div>
+    </section>
+
+    <!-- Einstellungen -->
+    <section id="view-settings" class="view" aria-label="Einstellungen">
+      <div class="card">
+        <h2>Haushalt</h2>
+        <label>Name des Haushalts
+          <input id="householdName" type="text" maxlength="40">
+        </label>
+        <p class="muted small">Unter diesem Namen sehen dich verbundene Haushalte.</p>
+      </div>
+      <div class="card">
+        <h2>Datensicherung</h2>
+        <p class="muted">Deine Daten liegen nur auf diesem Gerät. Exportiere regelmässig eine Sicherung.</p>
+        <div class="row">
+          <button id="btnExport" class="btn">Sicherung exportieren</button>
+          <label class="btn">Sicherung importieren
+            <input id="fileImport" type="file" accept="application/json,.json" hidden>
+          </label>
+        </div>
+        <div class="row">
+          <button id="btnReset" class="btn danger">Alle Daten löschen</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Hinweis</h2>
+        <p class="muted small">Apoko ist ein Organisationshilfsmittel und ersetzt keine ärztliche oder pharmazeutische Beratung. Massgebend sind Packungsbeilage und Fachpersonen. Notfall Schweiz: 144 · Tox Info Suisse: 145.</p>
+      </div>
+    </section>
+  </main>
+
+  <button id="fab" class="fab">+ Erfassen</button>
+
+  <nav class="tabbar">
+    <button class="tab active" data-view="inventory"><span>💊</span>Vorrat</button>
+    <button class="tab" data-view="linked"><span>🏠</span>Verbunden</button>
+    <button class="tab" data-view="check"><span>✅</span>Checkliste</button>
+    <button class="tab" data-view="settings"><span>⚙️</span>Einstellungen</button>
+  </nav>
+
+  <!-- Erfassen / Bearbeiten -->
+  <dialog id="itemDialog" class="sheet">
+    <form id="itemForm" method="dialog">
+      <header class="sheet-head">
+        <button type="button" class="btn ghost" data-close>Abbrechen</button>
+        <h2 id="itemDialogTitle">Artikel erfassen</h2>
+        <button type="submit" class="btn primary">Speichern</button>
+      </header>
+      <div class="sheet-body">
+        <button type="button" id="btnScan" class="btn scan">📷 Strichcode scannen</button>
+        <p id="scanInfo" class="scaninfo" hidden></p>
+
+        <input type="hidden" name="id">
+        <label>Name *
+          <input name="name" required placeholder="z. B. Dafalgan 500 mg" autocomplete="off">
+        </label>
+        <div class="grid2">
+          <label>Wirkstoff
+            <input name="substance" placeholder="z. B. Paracetamol" autocomplete="off">
+          </label>
+          <label>Stärke
+            <input name="strength" placeholder="z. B. 500 mg" autocomplete="off">
+          </label>
+        </div>
+        <label>Darreichungsform
+          <select name="form" id="formSelect"></select>
+        </label>
+        <p id="formHint" class="hint" hidden></p>
+
+        <div class="grid3">
+          <label>Packungsgrösse
+            <input name="quantity" type="number" min="0" step="any" inputmode="decimal" placeholder="20">
+          </label>
+          <label>Noch vorhanden
+            <input name="remaining" type="number" min="0" step="any" inputmode="decimal" placeholder="= voll">
+          </label>
+          <label>Einheit
+            <select name="unit" id="unitSelect"></select>
+          </label>
+        </div>
+
+        <div class="grid2">
+          <label>Ablaufdatum *
+            <input name="expiry" type="date" required>
+          </label>
+          <label>Herstelldatum
+            <input name="prodDate" type="date">
+          </label>
+        </div>
+        <p class="hint small">Steht nur Monat/Jahr auf der Packung (z. B. 12/2027), gilt der letzte Tag des Monats.
+          <button type="button" class="linkbtn" id="btnMonthEnd">Auf Monatsende setzen</button></p>
+
+        <div class="grid2">
+          <label>Angebrochen am
+            <input name="openedAt" type="date">
+          </label>
+          <label>Haltbar nach Anbruch (Tage)
+            <input name="openDays" type="number" min="0" inputmode="numeric" placeholder="z. B. 28">
+          </label>
+        </div>
+
+        <fieldset class="toggles">
+          <label class="switch">
+            <input type="checkbox" name="rx" id="rxToggle">
+            <span>Rezeptpflichtig</span>
+          </label>
+          <label>Abgabekategorie (CH)
+            <select name="category" id="categorySelect"></select>
+          </label>
+          <label class="switch">
+            <input type="checkbox" name="shared" id="sharedToggle">
+            <span>Mit verbundenen Haushalten teilen</span>
+          </label>
+          <p id="rxShareWarn" class="warn" hidden></p>
+        </fieldset>
+
+        <div class="grid2">
+          <label>Lagerort
+            <input name="location" placeholder="z. B. Badschrank" list="locations" autocomplete="off">
+            <datalist id="locations"></datalist>
+          </label>
+          <label>Für Person
+            <input name="person" placeholder="optional" list="persons" autocomplete="off">
+            <datalist id="persons"></datalist>
+          </label>
+        </div>
+        <div class="grid2">
+          <label>Charge / Lot
+            <input name="batch" autocomplete="off">
+          </label>
+          <label>GTIN / Strichcode
+            <input name="gtin" inputmode="numeric" autocomplete="off">
+          </label>
+        </div>
+        <label>Notizen (privat)
+          <textarea name="notes" rows="2" placeholder="z. B. Dosierung laut Ärztin"></textarea>
+        </label>
+
+        <button type="button" id="btnDelete" class="btn danger wide" hidden>Artikel löschen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Scanner -->
+  <dialog id="scanDialog" class="scanner">
+    <div class="scan-wrap">
+      <video id="scanVideo" muted playsinline></video>
+      <div class="scan-frame"></div>
+      <p id="scanStatus" class="scan-status">Kamera wird gestartet …</p>
+    </div>
+    <div class="scan-foot">
+      <div class="row">
+        <input id="manualCode" type="text" inputmode="numeric" placeholder="Code manuell eingeben" autocomplete="off">
+        <button id="btnManual" class="btn">OK</button>
+      </div>
+      <button id="btnScanClose" class="btn wide">Schliessen</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="vendor/qrcode.js" defer></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
