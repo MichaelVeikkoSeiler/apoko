@@ -274,6 +274,7 @@ function fillDatalists() {
 
 // ---------- Ablaufdatum: Monate links, Jahre rechts ----------
 const pick = { m: null, y: null };
+let pickFolded = false; // erfasstes Datum zugeklappt
 
 // Jahre: neuestes = in 4 Jahren (heute 2030), absteigend 11 Jahre, als letzter Knopf „älter“
 const OLD_YEAR = () => new Date().getFullYear() + 4 - 11; // „älter“ wird als dieses Jahr gespeichert (heute 2019)
@@ -293,7 +294,11 @@ function renderPicker() {
     + `<button type="button" data-y="old" class="${isOld(pick.y) ? 'active' : ''}">älter</button>`;
   $('#mpShow').textContent = isOld(pick.y) ? 'älter (abgelaufen)'
     : pick.m || pick.y ? `${pick.m ? String(pick.m).padStart(2, '0') : '––'}/${pick.y || '––––'}` : '';
-  $('#mpClear').hidden = !(pick.m || pick.y);
+  // Bereits erfasstes Datum: kompakt anzeigen, mit „Ändern“ wieder aufklappen
+  const folded = pickFolded && !!F.expiry.value;
+  $('#mpBody').hidden = $('#mpHint').hidden = folded;
+  $('#mpEdit').hidden = !folded;
+  $('#mpClear').hidden = folded || !(pick.m || pick.y);
 }
 
 /** Auswahl aus dem (versteckten) Feld übernehmen. */
@@ -319,6 +324,7 @@ $('.month-picker').addEventListener('click', e => {
   else if (b.dataset.y) pick.y = pick.y === +b.dataset.y ? null : +b.dataset.y;
   commitPicker();
 });
+$('#mpEdit').addEventListener('click', () => { pickFolded = false; renderPicker(); });
 $('#mpClear').addEventListener('click', () => { pick.m = pick.y = null; commitPicker(); });
 
 // ---------- Standorte ----------
@@ -563,6 +569,7 @@ function openItem(item) {
     else el.value = v ?? '';
   }
   delete F.imageUrl.dataset.source;
+  pickFolded = !!F.expiry.value;
   syncPicker();
   renderGallery();
   fillDatalists();

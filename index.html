@@ -248,13 +248,14 @@
           <span>Ablaufdatum (optional)</span>
           <strong id="mpShow"></strong>
           <button type="button" class="linkbtn" id="mpClear" hidden>leeren</button>
+          <button type="button" class="linkbtn" id="mpEdit" hidden>Ändern</button>
         </div>
         <input type="hidden" name="expiry">
-        <div class="month-picker">
+        <div class="month-picker" id="mpBody">
           <div class="mp-months" id="mpMonths" aria-label="Monat"></div>
           <div class="mp-years" id="mpYears" aria-label="Jahr"></div>
         </div>
-        <p class="hint small">Medikamente sind bis zum letzten Tag des angegebenen Monats haltbar.</p>
+        <p class="hint small" id="mpHint">Medikamente sind bis zum letzten Tag des angegebenen Monats haltbar.</p>
 
 
         <fieldset class="toggles">
