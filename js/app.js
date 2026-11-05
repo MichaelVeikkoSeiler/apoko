@@ -923,7 +923,7 @@ async function runResearch(bigs, firstNew = 0) {
       if (rr - l > 0.1 && b - t > 0.1 && (rr - l) * (b - t) < 0.92) {
         const m = 0.02; // etwas Rand lassen
         const src = gallery[0].blob || await photos.getPhoto(gallery[0].key);
-        const cut = src && await photos.cropImage(src, { l: l - m, t: t - m, r: rr + m, b: b + m });
+        const cut = src && await photos.cropSquare(src, { l: l - m, t: t - m, r: rr + m, b: b + m });
         if (cut) {
           if (gallery[0].key) removedKeys.push(gallery[0].key);
           gallery[0] = { blob: cut, url: URL.createObjectURL(cut) };
@@ -1014,10 +1014,12 @@ async function openCrop(idx) {
   const blob = g.blob || await photos.getPhoto(g.key);
   if (!blob) return toast('Foto nicht gefunden.');
   crop.idx = idx; crop.blob = blob;
-  crop.rect = { l: 0.04, t: 0.04, r: 0.96, b: 0.96 };
   const img = $('#cropImg');
   img.src = URL.createObjectURL(blob);
   await img.decode().catch(() => {});
+  crop.W = img.naturalWidth || 1; crop.H = img.naturalHeight || 1;
+  // Start: grösstes Quadrat in der Mitte, mit etwas Rand
+  crop.rect = photos.squareRect({ l: 0.04, t: 0.04, r: 0.96, b: 0.96 }, crop.W, crop.H);
   cropDlg.showModal();
   layoutCrop();
 }
@@ -1035,17 +1037,21 @@ $('#cropStage').addEventListener('pointermove', e => {
   const d = crop.drag;
   if (!d || e.pointerId !== d.id) return;
   const dx = (e.clientX - d.x0) / d.w, dy = (e.clientY - d.y0) / d.h;
-  const s = d.start, MIN = 0.08, cl = v => Math.min(1, Math.max(0, v));
+  const s = d.start, MIN = 0.08;
   const r = { ...s };
   if (d.mode === 'move') {
     const w = s.r - s.l, h = s.b - s.t;
     r.l = Math.min(1 - w, Math.max(0, s.l + dx)); r.r = r.l + w;
     r.t = Math.min(1 - h, Math.max(0, s.t + dy)); r.b = r.t + h;
   } else {
-    if (d.mode.includes('w')) r.l = Math.min(cl(s.l + dx), s.r - MIN);
-    if (d.mode.includes('e')) r.r = Math.max(cl(s.r + dx), s.l + MIN);
-    if (d.mode.includes('n')) r.t = Math.min(cl(s.t + dy), s.b - MIN);
-    if (d.mode.includes('s')) r.b = Math.max(cl(s.b + dy), s.t + MIN);
+    // Quadrat: gegenüberliegende Ecke bleibt fest, Seite folgt dem Finger (in Bildschirmpixeln)
+    const W = d.w, H = d.h, west = d.mode.includes('w'), north = d.mode.includes('n');
+    const ax = (west ? s.r : s.l) * W, ay = (north ? s.b : s.t) * H;       // feste Ecke
+    const px = (west ? s.l : s.r) * W + dx * W, py = (north ? s.t : s.b) * H + dy * H;
+    const maxSide = Math.min(west ? ax : W - ax, north ? ay : H - ay);
+    const side = Math.min(maxSide, Math.max(MIN * Math.min(W, H), Math.abs(px - ax), Math.abs(py - ay)));
+    r.l = (west ? ax - side : ax) / W; r.r = (west ? ax : ax + side) / W;
+    r.t = (north ? ay - side : ay) / H; r.b = (north ? ay : ay + side) / H;
   }
   crop.rect = r;
   layoutCrop();
@@ -1055,9 +1061,9 @@ $('#cropStage').addEventListener('pointerup', endCropDrag);
 $('#cropStage').addEventListener('pointercancel', endCropDrag);
 $('#btnCrop').addEventListener('click', () => openCrop(0));
 $('#cropCancel').addEventListener('click', () => cropDlg.close());
-$('#cropReset').addEventListener('click', () => { crop.rect = { l: 0, t: 0, r: 1, b: 1 }; layoutCrop(); });
+$('#cropReset').addEventListener('click', () => { crop.rect = photos.squareRect({ l: 0, t: 0, r: 1, b: 1 }, crop.W, crop.H); layoutCrop(); });
 $('#cropApply').addEventListener('click', async () => {
-  const cut = await photos.cropImage(crop.blob, crop.rect);
+  const cut = await photos.cropSquare(crop.blob, crop.rect);
   const g = gallery[crop.idx];
   if (g?.key) removedKeys.push(g.key);
   gallery[crop.idx] = { blob: cut, url: URL.createObjectURL(cut) };
