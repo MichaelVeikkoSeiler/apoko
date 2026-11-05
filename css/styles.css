@@ -383,3 +383,14 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .name-suggest button { display: block; width: 100%; text-align: left; font: inherit; color: var(--text); background: none; border: 0; border-bottom: 1px solid var(--border); padding: 8px 10px; cursor: pointer; }
 .name-suggest button:last-child { border-bottom: 0; }
 .name-suggest small { display: block; color: var(--muted); }
+/* Personen: Emoji-Auswahl und Grösse */
+.person-row { display: block; padding: 10px 0; }
+.person-head { display: grid; grid-template-columns: 3rem 1fr; gap: 8px; align-items: center; }
+.person-head .pi { font-size: 1.8rem; width: 3rem; height: 3rem; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; padding: 0; line-height: 1; }
+.emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin: 8px 0; padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
+.emoji-grid button { font-size: 1.5rem; border: 0; background: none; border-radius: 8px; padding: 4px 0; cursor: pointer; line-height: 1.2; }
+.emoji-grid button.active { background: var(--primary-soft); outline: 2px solid var(--primary); }
+.person-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+.person-nums label { margin: 0; font-size: .75rem; }
+.person-nums input { min-height: 40px; padding: 6px 8px; }
+.person-row .conf { margin: 6px 0 0; }
