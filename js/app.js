@@ -178,7 +178,7 @@ function renderInventory() {
 
 function setFilter(f) { filter = f; renderInventory(); }
 $('#filters').addEventListener('click', e => { const b = e.target.closest('[data-filter]'); if (b) setFilter(b.dataset.filter); });
-$('#stats').addEventListener('click', e => { const b = e.target.closest('[data-filter]'); if (b) setFilter(b.dataset.filter); });
+$('#stats').addEventListener('click', e => { const b = e.target.closest('[data-filter]'); if (b) { showView('inventory'); setFilter(b.dataset.filter); } });
 $('#search').addEventListener('input', e => { query = e.target.value.trim(); renderInventory(); });
 // ---- Nach links wischen zum Löschen ----
 const SWIPE_OPEN = -104;
@@ -485,6 +485,7 @@ let gallery = [];        // { key?, blob?, url }
 let removedKeys = [];
 
 function renderGallery() {
+  $('#btnCrop').hidden = !gallery.length || !!F.imageUrl.value;
   const tiles = [];
   if (F.imageUrl.value) tiles.push({ url: F.imageUrl.value, official: true });
   gallery.forEach((g, i) => tiles.push({ url: g.url, idx: i }));
@@ -492,7 +493,6 @@ function renderGallery() {
     <div class="gtile">
       <button type="button" class="gimg" data-view="${n}"><img src="${esc(t.url || '')}" alt="" referrerpolicy="no-referrer"></button>
       ${n === 0 ? '<span class="gbadge">Front</span>' : '<span class="gbadge info">nur Info</span>'}
-      ${n === 0 && !t.official ? `<button type="button" class="gcrop" data-crop="${t.idx}" aria-label="Zuschneiden">✂️</button>` : ''}
       ${t.official ? '<span class="gbadge src">offiziell</span>' : ''}
       <button type="button" class="gdel" ${t.official ? 'data-del-official' : `data-del-photo="${t.idx}"`} aria-label="Bild entfernen">✕</button>
     </div>`).join('') + `
@@ -1057,6 +1057,7 @@ $('#cropStage').addEventListener('pointermove', e => {
 const endCropDrag = e => { if (crop.drag?.id === e.pointerId) crop.drag = null; };
 $('#cropStage').addEventListener('pointerup', endCropDrag);
 $('#cropStage').addEventListener('pointercancel', endCropDrag);
+$('#btnCrop').addEventListener('click', () => openCrop(0));
 $('#cropCancel').addEventListener('click', () => cropDlg.close());
 $('#cropReset').addEventListener('click', () => { crop.rect = { l: 0, t: 0, r: 1, b: 1 }; layoutCrop(); });
 $('#cropApply').addEventListener('click', async () => {
