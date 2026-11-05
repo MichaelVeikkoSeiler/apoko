@@ -2,7 +2,7 @@ import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
 import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, FORM_USES, PRODUCT_TYPES, looksFrench, formById } from './knowledge.js';
 import * as store from './store.js';
 import { startScanner, decodeImage, startCamera } from './scanner.js';
-import { lookupSwissDrug, searchByText, guessForm } from './drugdb.js';
+import { lookupSwissDrug, searchByText, searchByName, guessForm } from './drugdb.js';
 import { lookupOpenProduct } from './productdb.js';
 import * as photos from './photos.js';
 import { recognizeText } from './ocr.js';
@@ -378,6 +378,34 @@ function autoFormFromName() {
 }
 F.name.addEventListener('change', autoFormFromName);
 
+// Namensvorschläge beim Eintippen (Swissmedic-Liste)
+let nameTimer, nameHits = [];
+F.name.addEventListener('input', () => {
+  clearTimeout(nameTimer);
+  nameTimer = setTimeout(async () => {
+    const box = $('#nameSuggest');
+    if (F.name.value.trim().length < 3) { box.hidden = true; return; }
+    nameHits = await searchByName(F.name.value);
+    box.hidden = !nameHits.length;
+    box.innerHTML = nameHits.map((h, i) => `<button type="button" data-nh="${i}"><strong>${esc(h.name)}</strong><small>${esc([h.manufacturer, h.usage].filter(Boolean).join(' · '))}</small></button>`).join('');
+  }, 200);
+});
+$('#nameSuggest').addEventListener('click', e => {
+  const b = e.target.closest('[data-nh]');
+  if (!b) return;
+  const h = nameHits[+b.dataset.nh];
+  for (const [k, v] of Object.entries(h)) {
+    const el = F[k];
+    if (!el || v == null || v === '') continue;
+    if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
+  }
+  $('#nameSuggest').hidden = true;
+  $('#suggestions').hidden = true;
+  updateFormHint(); updateRxWarn();
+  toast('Angaben aus der Swissmedic-Liste übernommen');
+});
+F.name.addEventListener('blur', () => setTimeout(() => { $('#nameSuggest').hidden = true; }, 250));
+
 // ---------- Fotos eines Artikels (Galerie) ----------
 // Eigene Fotos liegen in IndexedDB; item.photos = Liste der Schlüssel (das erste ist das Frontbild).
 // Ältere Artikel hatten ein einzelnes Foto unter der Artikel-ID.
@@ -465,6 +493,7 @@ function openItem(item) {
   $('#scanInfo').textContent = '';
   scanNote = '';
   $('#suggestions').hidden = true;
+  $('#nameSuggest').hidden = true;
   formTouched = !!item;
   gallery = photoKeys(item).map(key => ({ key, url: '' }));
   removedKeys = [];
@@ -776,13 +805,15 @@ async function analyzeAll(shots) {
       if (code && parseBarcode(code).type !== 'text') { await applyScan(code); break; }
     }
     // 2. Aufgedruckten Text lesen, wenn noch etwas fehlt
-    let text = '';
+    let text = '', frontText = '';
     if (!F.name.value || !F.quantity.value || !F.productType.value) {
       for (let i = 0; i < Math.min(bigs.length, 4); i++) {
         info.textContent = `Text wird gelesen (${i + 1}/${Math.min(bigs.length, 4)}) …`;
-        text += '\n' + await recognizeText(bigs[i], m => {
+        const t = await recognizeText(bigs[i], m => {
           if (/load|initializ/.test(m.status)) info.textContent = 'Texterkennung wird vorbereitet (nur beim ersten Mal) …';
         }, { sparse: true }).catch(() => '');
+        if (i === 0) frontText = t; // Name steht auf der Vorderseite; die Rückseite hat zu viele allgemeine Wörter
+        text += '\n' + t;
       }
       const q = quantityFromText(text);
       if (q && !F.quantity.value) { F.quantity.value = q.qty; F.unit.value = q.unit; }
@@ -791,8 +822,8 @@ async function analyzeAll(shots) {
     // 3. KI-Recherche mit Websuche (optional)
     if (getApiKey()) {
       await runResearch(bigs);
-    } else if (!F.name.value && text.trim()) {
-      renderSuggestions(await searchByText(text), text);
+    } else if (!F.name.value && frontText.trim()) {
+      renderSuggestions(await searchByText(frontText), frontText);
     } else {
       info.textContent = (info.textContent.startsWith('✓') ? info.textContent + ' · ' : '✓ ')
         + 'Tipp: Mit einem Claude-API-Schlüssel (Einstellungen) recherchiert die App Hersteller, Art und Produktinfos automatisch.';
@@ -849,11 +880,11 @@ function renderSuggestions(hits, text) {
       .filter(l => l.length >= 4 && l.length <= 50 && (l.match(/[a-zäöüéèà]/gi) || []).length / l.length > 0.6))]
       .slice(0, 6);
     if (!lines.length) {
-      info.textContent = 'Kein Text erkannt. Tipp: Bei gutem Licht, ohne Spiegelung, nah an den aufgedruckten Namen gehen.';
+      info.textContent = note + 'Kein eindeutiger Name erkannt. Tipp: Den Namen eintippen, die App schlägt dann passende Produkte aus der Swissmedic-Liste vor.';
       box.innerHTML = TABLET_NOTE;
       return;
     }
-    info.textContent = note + 'Kein passendes Arzneimittel aus der Swissmedic-Liste gefunden. Gelesenen Text als Namen übernehmen?';
+    info.textContent = note + 'Kein eindeutiger Treffer. Gelesenen Text als Namen übernehmen, oder den Namen eintippen: Die App schlägt dann passende Produkte vor.';
     box.innerHTML = lines.map((l, i) => `<button type="button" class="suggestion" data-line="${i}"><strong>${esc(l)}</strong></button>`).join('')
       + '<p>Mehrere antippen, um sie zu kombinieren (z. B. Marke + Produkt).</p>';
     box.onclick = ev => {
