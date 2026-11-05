@@ -317,8 +317,8 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .gbadge.info { background: rgb(0 0 0 / .55); color: #fff; font-weight: 500; }
 
 /* Beschwerden */
-.tabbar { grid-template-columns: repeat(5, 1fr); }
-.tab { font-size: .66rem; }
+.tabbar { grid-template-columns: repeat(6, 1fr); }
+.tab { font-size: .6rem; }
 #complaint { margin-top: 6px; }
 #symptomChips { margin-top: 8px; }
 .chip.sym.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
@@ -435,5 +435,3 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 
 /* Hinweise und Zahlen ganz unten im Vorrat */
 .crop-btn { margin-top: 8px; width: 100%; }
-.tabbar { grid-template-columns: repeat(6, 1fr) !important; }
-.tab { font-size: .6rem !important; }

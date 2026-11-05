@@ -1,5 +1,5 @@
 // Service Worker: macht Apoko offline verfügbar.
-const CACHE = 'apoko-v40';
+const CACHE = 'apoko-v41';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/app.js', 'js/gs1.js', 'js/knowledge.js', 'js/store.js', 'js/share.js', 'js/scanner.js', 'js/drugdb.js', 'js/photos.js', 'js/ocr.js', 'js/productdb.js', 'js/advice.js', 'js/research.js',
@@ -21,7 +21,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' }) // Browser-Cache umgehen, damit Updates vollständig ankommen
       .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res; })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html')))
   );
