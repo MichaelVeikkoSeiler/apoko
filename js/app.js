@@ -632,7 +632,9 @@ async function applyScan(raw) {
       if (drug) {
         fill(drug);
         if (drug.usageDetail && drug.usageDetail !== drug.usage && !F.info.value) F.info.value = `• Anwendung laut Swissmedic: ${drug.usageDetail}`;
-        info.push('Gefunden in der Swissmedic-Liste');
+        info.push(drug.sameAuthorization
+          ? 'Gefunden in der Swissmedic-Liste über die Zulassungsnummer (ältere Packung, Packungsgrösse bitte prüfen)'
+          : 'Gefunden in der Swissmedic-Liste');
       } else {
         // Ältere Packungen (z. B. umbenannte Produkte) fehlen in der aktuellen Liste
         scanNote = `Strichcode gelesen (Swissmedic-Nr. ${sm.authNo}), aber nicht in der aktuellen Swissmedic-Liste, vermutlich eine ältere Packung.`;

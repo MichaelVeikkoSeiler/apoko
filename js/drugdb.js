@@ -96,8 +96,12 @@ export async function lookupSwissDrug(gtin) {
   const sm = swissmedicInfo(gtin);
   if (!sm) return null;
   const db = await loadDb();
-  const row = db?.[sm.authNo + sm.packCode];
-  return row ? rowToFields(row) : null;
+  if (!db) return null;
+  const row = db[sm.authNo + sm.packCode];
+  if (row) return rowToFields(row);
+  // Ältere Packung: Packungscode nicht mehr aufgeführt, aber dieselbe Zulassung (= dasselbe Produkt)
+  const key = Object.keys(db).find(k => k.startsWith(sm.authNo));
+  return key ? { ...rowToFields(db[key], { withQuantity: false }), sameAuthorization: true } : null;
 }
 
 // ---- Suche nach aufgedrucktem Text (Blister, Flasche, Tube) ----
