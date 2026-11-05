@@ -275,21 +275,24 @@ function fillDatalists() {
 // ---------- Ablaufdatum: Monate links, Jahre rechts ----------
 const pick = { m: null, y: null };
 
+// Jahre: neuestes = in 4 Jahren (heute 2030), absteigend 11 Jahre, als letzter Knopf „älter“
+const OLD_YEAR = () => new Date().getFullYear() + 4 - 11; // „älter“ wird als dieses Jahr gespeichert (heute 2019)
+
 function pickerYears() {
   const now = new Date().getFullYear();
-  // neuestes Jahr = in 4 Jahren (heute 2030), dann 12 Jahre zurück; absteigend
-  const years = Array.from({ length: 12 }, (_, i) => now + 4 - i);
-  if (pick.y && !years.includes(pick.y)) years.push(pick.y);
-  return years.sort((a, b) => b - a);
+  return Array.from({ length: 11 }, (_, i) => now + 4 - i);
 }
+
+const isOld = y => y != null && y <= OLD_YEAR();
 
 function renderPicker() {
   $('#mpMonths').innerHTML = Array.from({ length: 12 }, (_, i) => i + 1)
-    .map(m => `<button type="button" data-m="${m}" class="${pick.m === m ? 'active' : ''}">${m}</button>`).join('');
+    .map(m => `<button type="button" data-m="${m}" class="${pick.m === m && !isOld(pick.y) ? 'active' : ''}">${m}</button>`).join('');
   $('#mpYears').innerHTML = pickerYears()
-    .map(y => `<button type="button" data-y="${y}" class="${pick.y === y ? 'active' : ''}">${y}</button>`).join('');
-  $('#mpShow').textContent = pick.m || pick.y
-    ? `${pick.m ? String(pick.m).padStart(2, '0') : '––'}/${pick.y || '––––'}` : '';
+    .map(y => `<button type="button" data-y="${y}" class="${pick.y === y ? 'active' : ''}">${y}</button>`).join('')
+    + `<button type="button" data-y="old" class="${isOld(pick.y) ? 'active' : ''}">älter</button>`;
+  $('#mpShow').textContent = isOld(pick.y) ? 'älter (abgelaufen)'
+    : pick.m || pick.y ? `${pick.m ? String(pick.m).padStart(2, '0') : '––'}/${pick.y || '––––'}` : '';
   $('#mpClear').hidden = !(pick.m || pick.y);
 }
 
@@ -302,7 +305,9 @@ function syncPicker() {
 }
 
 function commitPicker() {
-  F.expiry.value = pick.m && pick.y ? `${pick.y}-${String(pick.m).padStart(2, '0')}` : '';
+  // „älter“: Monat egal, längst abgelaufen
+  if (isOld(pick.y)) F.expiry.value = `${pick.y}-${String(pick.m || 12).padStart(2, '0')}`;
+  else F.expiry.value = pick.m && pick.y ? `${pick.y}-${String(pick.m).padStart(2, '0')}` : '';
   renderPicker();
 }
 
@@ -310,7 +315,8 @@ $('.month-picker').addEventListener('click', e => {
   const b = e.target.closest('[data-m], [data-y]');
   if (!b) return;
   if (b.dataset.m) pick.m = pick.m === +b.dataset.m ? null : +b.dataset.m;
-  if (b.dataset.y) pick.y = pick.y === +b.dataset.y ? null : +b.dataset.y;
+  if (b.dataset.y === 'old') pick.y = isOld(pick.y) ? null : OLD_YEAR();
+  else if (b.dataset.y) pick.y = pick.y === +b.dataset.y ? null : +b.dataset.y;
   commitPicker();
 });
 $('#mpClear').addEventListener('click', () => { pick.m = pick.y = null; commitPicker(); });
