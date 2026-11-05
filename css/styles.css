@@ -394,3 +394,13 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .person-nums label { margin: 0; font-size: .75rem; }
 .person-nums input { min-height: 40px; padding: 6px 8px; }
 .person-row .conf { margin: 6px 0 0; }
+/* Ablaufdatum: Monate links (3×4), Jahre rechts */
+.mp-head { display: flex; align-items: baseline; gap: 10px; font-size: .85rem; color: var(--muted); margin: 10px 0 6px; }
+.mp-head strong { color: var(--text); font-size: 1rem; }
+.mp-head .linkbtn { margin-left: auto; font-size: .85rem; }
+.month-picker { display: grid; grid-template-columns: 3fr 1.4fr; gap: 10px; }
+.mp-months { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.mp-years { display: grid; grid-template-columns: 1fr; gap: 6px; align-content: start; }
+.month-picker button { min-height: 42px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-size: 1.05rem; cursor: pointer; }
+.mp-years button { min-height: 0; padding: 6px 0; font-size: .95rem; }
+.month-picker button.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); font-weight: 600; }
