@@ -45,10 +45,14 @@
         <p><strong>Noch nichts erfasst.</strong></p>
         <p class="muted">Tippe auf <b>+ Erfassen</b> und scanne den Strichcode auf der Packung.</p>
       </div>
-      <div class="inv-foot">
-        <div id="alerts"></div>
-        <div class="stats" id="stats"></div>
-      </div>
+    </section>
+
+    <!-- Übersicht -->
+    <section id="view-overview" class="view" aria-label="Übersicht">
+      <h2>Übersicht</h2>
+      <div class="stats" id="stats"></div>
+      <div id="alerts"></div>
+      <p class="muted small">Tippe auf eine Zahl, um die passenden Artikel im Vorrat zu sehen.</p>
     </section>
 
     <!-- Verbunden -->
@@ -175,6 +179,7 @@
 
   <nav class="tabbar">
     <button class="tab active" data-view="inventory"><span>💊</span>Vorrat</button>
+    <button class="tab" data-view="overview"><span>📊</span>Übersicht</button>
     <button class="tab" data-view="help"><span>🩺</span>Beschwerden</button>
     <button class="tab" data-view="linked"><span>🏠</span>Verbunden</button>
     <button class="tab" data-view="check"><span>✅</span>Checkliste</button>
@@ -200,6 +205,7 @@
         <div class="photos-block">
           <p id="photoHint" class="hint small">📷 Tipp: Immer <strong>zuerst das Frontbild</strong> (Vorderseite der Packung) fotografieren, es wird beim Artikel gespeichert. Weitere Fotos, z. B. von der Rückseite, liest die App nur aus. Sie werden nicht gespeichert.</p>
           <div id="gallery" class="gallery"></div>
+          <button type="button" id="btnCrop" class="btn crop-btn" hidden>✂️ Foto zuschneiden</button>
           <p id="photoSource" class="muted small" hidden></p>
         </div>
 
