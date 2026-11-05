@@ -406,8 +406,8 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .month-picker button.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); font-weight: 600; }
 
 /* Leuchtende Statusfarben (grün / orange / rot) */
-:root { --st-ok: #16a34a; --st-warn: #f97316; --st-bad: #ef4444; --st-ink: #ffffff; }
-.item { border-left-width: 7px; }
+:root { --st-ok: #16a34a; --st-warn: #f97316; --st-bad: #ef4444; --st-ink: #ffffff; --st-none: #64748b; }
+.item { border-left-width: 7px; border-left-color: var(--st-none); }
 .item.ok { border-left-color: var(--st-ok); }
 .item.soon, .item.expired.recent { border-left-color: var(--st-warn); }
 .item.expired { border-left-color: var(--st-bad); }
@@ -434,5 +434,5 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .gcrop { position: absolute; left: 3px; top: 3px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgb(0 0 0 / .55); color: #fff; font-size: .9rem; line-height: 1; cursor: pointer; padding: 0; }
 
 /* Hinweise und Zahlen ganz unten im Vorrat */
-.inv-foot { margin-top: 18px; padding-bottom: 80px; }
+.inv-foot { margin-top: 18px; padding-bottom: 110px; }
 .inv-foot #alerts:empty { display: none; }
