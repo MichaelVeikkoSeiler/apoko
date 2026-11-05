@@ -404,3 +404,16 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .month-picker button { min-height: 42px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-size: 1.05rem; cursor: pointer; }
 .mp-years button { min-height: 0; padding: 6px 0; font-size: .95rem; }
 .month-picker button.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); font-weight: 600; }
+
+/* Leuchtende Statusfarben (grün / orange / rot) */
+:root { --st-ok: #16a34a; --st-warn: #f97316; --st-bad: #ef4444; --st-ink: #ffffff; }
+.item { border-left-width: 7px; }
+.item.ok { border-left-color: var(--st-ok); }
+.item.soon, .item.expired.recent { border-left-color: var(--st-warn); }
+.item.expired { border-left-color: var(--st-bad); }
+.badge.ok, .badge.soon, .badge.expired, .badge.expired.recent { color: var(--st-ink); font-weight: 700; }
+.badge.ok { background: var(--st-ok); }
+.badge.soon, .badge.expired.recent { background: var(--st-warn); }
+.badge.expired { background: var(--st-bad); }
+.stat.soon b { color: var(--st-warn); }
+.stat.expired b { color: var(--st-bad); }
