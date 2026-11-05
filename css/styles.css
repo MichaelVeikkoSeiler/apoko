@@ -378,3 +378,8 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 /* Abgelaufen, aber höchstens 12 Monate: orange */
 .item.expired.recent { border-left-color: var(--warn); }
 .badge.expired.recent { background: var(--warn-soft); color: var(--warn); }
+/* Namensvorschläge beim Eintippen */
+.name-suggest { border: 1px solid var(--border); border-radius: 10px; margin-top: 4px; overflow: hidden; background: var(--surface); box-shadow: var(--shadow); }
+.name-suggest button { display: block; width: 100%; text-align: left; font: inherit; color: var(--text); background: none; border: 0; border-bottom: 1px solid var(--border); padding: 8px 10px; cursor: pointer; }
+.name-suggest button:last-child { border-bottom: 0; }
+.name-suggest small { display: block; color: var(--muted); }

@@ -47,7 +47,7 @@ jobs:
           mkdir -p data
           python scripts/build_swissmedic.py --download data/swissmedic.json
         env:
-          SAMPLE: "Iberogast|Dafalgan 500|Merfen"
+          SAMPLE: "Echinaforce|Merfen Classic"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .

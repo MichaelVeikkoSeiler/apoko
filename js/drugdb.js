@@ -124,7 +124,8 @@ async function productIndex() {
     const words = normText(row[0]).split(' ');
     // Wirkstoffwörter im Namen (z. B. „Chlorhexidin“) sind keine Namensmerkmale
     const subs = normText(row[1]).split(' ').filter(x => x.length >= 6);
-    const isSubstance = w => w.length >= 6 && subs.some(x => x.startsWith(w.slice(0, 6)));
+    // 7 gleiche Anfangsbuchstaben: „Chlorhexidin“ ~ „chlorhexidini“, aber „Echinaforce“ ≠ „echinaceae“
+    const isSubstance = w => w.length >= 7 && subs.some(x => x.startsWith(w.slice(0, 7)));
     return {
       row,
       brand: words[0],
@@ -153,35 +154,58 @@ function lev1(a, b) {
  * Sucht Medikamente anhand von erkanntem Text. Gibt bis zu `limit` Vorschläge
  * mit Formularwerten zurück (ohne Packungsgrösse, die ist bei losen Blistern unbekannt).
  */
-export async function searchByText(text, limit = 6) {
+// Allgemeine Wörter, die in vielen Produktnamen vorkommen und allein nichts aussagen
+const GENERIC = new Set(['tabletten', 'filmtabletten', 'lutschtabletten', 'brausetabletten', 'schmelztabletten', 'kautabletten',
+  'kapseln', 'weichkapseln', 'tropfen', 'augentropfen', 'nasentropfen', 'ohrentropfen', 'losung', 'loesung', 'creme', 'salbe',
+  'sirup', 'spray', 'nasenspray', 'granulat', 'pulver', 'suspension', 'emulsion', 'zapfchen', 'suppositorien', 'pflaster',
+  'injektionslosung', 'injektionssuspension', 'durchstechflaschen', 'durchstechflasche', 'fertigspritze', 'anwendung',
+  'mundhohle', 'einnehmen', 'erkaltung', 'resistenz', 'praparat', 'frischpflanzen', 'classic', 'kinder', 'junior', 'forte',
+  'retard', 'rapid', 'extra', 'plus', 'akut', 'solution', 'pommade', 'comprimes', 'pelliculés', 'capsules', 'gouttes',
+  'cutanee', 'application', 'buvable', 'sirop', 'injectable', 'baume', 'schmerz', 'husten', 'schlaf', 'magen', 'allergie',
+  'pflanzlich', 'homoopathisch', 'arzneimittel', 'medikament', 'packung', 'inhalt', 'dosierung']);
+
+/**
+ * Vorschläge anhand des Texts auf dem Frontfoto. Bewusst streng: nur wenn ein
+ * eindeutiges, langes Namenswort (z. B. „Echinaforce“, „Merfen“) auf dem Foto steht.
+ * Lieber kein Vorschlag als ein falscher.
+ */
+export async function searchByText(text, limit = 3) {
   const idx = await productIndex();
   if (!idx) return [];
-  const tokens = new Set(normText(text).split(' ').filter(t => t.length >= 3));
+  const tokens = new Set(normText(text).split(' ').filter(t => t.length >= 4));
   const list = [...tokens];
-  // Namen unscharf vergleichen: Texterkennung liest z. B. „Merfe“ statt „Merfen“ (® stört)
-  // oder vertauscht einen Buchstaben.
+  // unscharf: Texterkennung liest z. B. „Merfe“ statt „Merfen“ (® stört) oder vertauscht einen Buchstaben
   const has = w => tokens.has(w)
-    || (w.length >= 5 && list.some(t => t.length >= 5 && lev1(t, w)))
-    || (w.length >= 5 && list.some(t => t.length >= 4 && w.startsWith(t) && w.length - t.length <= 2));
-  // Wirkstoffe stehen in der Liste lateinisch (paracetamolum), aufgedruckt deutsch (Paracetamol)
-  const hasSubstance = sub => list.some(t => t.length >= 6 && t.length >= sub.length - 3 && sub.startsWith(t.slice(0, -1)));
-  const nums = new Set(list.filter(t => /^\d/.test(t)).concat(
-    (String(text).match(/\d+(?:[.,]\d+)?/g) || []).map(n => n.replace(',', '.'))));
+    || list.some(t => t.length >= 5 && lev1(t, w))
+    || list.some(t => t.length >= 5 && w.startsWith(t) && w.length - t.length <= 1);
+  const nums = new Set((String(text).match(/\d+(?:[.,]\d+)?/g) || []).map(n => n.replace(',', '.')));
 
   const scored = [];
   for (const p of idx) {
-    let score = 0, nameHit = false;
-    if (p.brand.length >= 4 && !STOP.has(p.brand) && p.words.includes(p.brand) && has(p.brand)) { score += 10; nameHit = true; }
-    for (const w of p.words) if (w !== p.brand && w.length >= 5 && has(w)) { score += 3; nameHit = true; }
-    if (!nameHit) {
-      if (p.substance.length >= 5 && hasSubstance(p.substance)) score += 4;
-      else continue;
-    }
-    for (const n of p.numbers) if (nums.has(n) || nums.has(n.replace(',', '.'))) score += 3;
-    scored.push({ score, p, nameHit });
+    const distinctive = p.words.filter(w => w.length >= 6 && !GENERIC.has(w));
+    let score = 0;
+    for (const w of distinctive) if (has(w)) score += w === p.brand ? 10 : 6;
+    if (!score) continue;
+    for (const n of p.numbers) if (nums.has(n) || nums.has(n.replace(',', '.'))) score += 2;
+    // Darreichungsform auf dem Foto (z. B. „Tropfen“) passt zum Produktnamen
+    for (const w of normText(p.row[0]).split(' ')) if (GENERIC.has(w) && tokens.has(w)) score += 3;
+    scored.push({ score, p });
   }
-  // Passt ein Produktname, keine reinen Wirkstoff-Treffer mehr vorschlagen
-  if (scored.some(x => x.nameHit)) scored.splice(0, scored.length, ...scored.filter(x => x.nameHit));
   scored.sort((a, b) => b.score - a.score || a.p.row[0].length - b.p.row[0].length);
   return scored.slice(0, limit).map(({ p }) => rowToFields(p.row, { withQuantity: false }));
+}
+
+/** Namenssuche beim Eintippen: alle Suchwörter müssen im Produktnamen vorkommen. */
+export async function searchByName(query, limit = 8) {
+  const idx = await productIndex();
+  const q = normText(query).split(' ').filter(Boolean);
+  if (!idx || !q.length || q.join('').length < 3) return [];
+  const hits = [];
+  for (const p of idx) {
+    const name = normText(p.row[0]);
+    if (!q.every(w => name.includes(w))) continue;
+    hits.push({ p, starts: name.startsWith(q[0]) || name.split(' ').some(x => x.startsWith(q[0])) });
+  }
+  hits.sort((a, b) => (b.starts - a.starts) || a.p.row[0].length - b.p.row[0].length);
+  return hits.slice(0, limit).map(({ p }) => rowToFields(p.row, { withQuantity: false }));
 }
