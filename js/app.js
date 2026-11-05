@@ -808,7 +808,8 @@ async function analyzeAll(shots) {
     }
     // 2. Aufgedruckten Text lesen, wenn noch etwas fehlt
     let text = '', frontText = '';
-    if (!F.name.value || !F.quantity.value || !F.productType.value) {
+    // Mit Claude-Schlüssel: Texterkennung auf dem Handy überspringen, Claude liest die Fotos selbst (schneller, genauer)
+    if (!getApiKey() && (!F.name.value || !F.quantity.value || !F.productType.value)) {
       for (let i = 0; i < Math.min(bigs.length, 4); i++) {
         info.textContent = `Text wird gelesen (${i + 1}/${Math.min(bigs.length, 4)}) …`;
         const t = await recognizeText(bigs[i], m => {
