@@ -335,6 +335,7 @@ $('#locationChips').addEventListener('click', e => {
   if (!b) return;
   // Nochmals antippen = abwählen
   F.location.value = sameLoc(F.location.value, b.dataset.loc) ? '' : b.dataset.loc;
+  if (F.location.value) F.location.classList.remove('field-invalid');
   renderLocationChips();
 });
 F.location.addEventListener('input', renderLocationChips);
@@ -610,6 +611,7 @@ function flagField(el, msg) {
 form.addEventListener('submit', async e => {
   e.preventDefault();
   if (!F.name.value.trim()) return flagField(F.name, 'Bitte einen Namen eingeben.');
+  if (!F.location.value.trim()) return flagField(F.location, 'Bitte einen Standort wählen oder eingeben.');
   // Ablaufdatum ist optional; nur ein unvollständig eingetipptes Datum wird beanstandet
   if (!F.expiry.value && (pick.m || pick.y)) { toast('Ablaufdatum unvollständig: bitte Monat und Jahr wählen oder leeren.'); return $('.month-picker').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   const item = readForm();
