@@ -26,8 +26,6 @@
   <main>
     <!-- Vorrat -->
     <section id="view-inventory" class="view active" aria-label="Vorrat">
-      <div id="alerts"></div>
-      <div class="stats" id="stats"></div>
       <div class="searchbar searchrow">
         <input id="search" type="search" placeholder="Suchen: Name, Wirkstoff …" autocomplete="off">
         <select id="locationFilter" aria-label="Standort"><option value="">Alle Standorte</option></select>
@@ -46,6 +44,10 @@
         <p class="big">💊</p>
         <p><strong>Noch nichts erfasst.</strong></p>
         <p class="muted">Tippe auf <b>+ Erfassen</b> und scanne den Strichcode auf der Packung.</p>
+      </div>
+      <div class="inv-foot">
+        <div id="alerts"></div>
+        <div class="stats" id="stats"></div>
       </div>
     </section>
 
@@ -328,6 +330,25 @@
         <label class="linkbtn">Fotos aus der Galerie<input id="capFile" type="file" accept="image/*" multiple hidden></label>
         <button type="button" id="capManual" class="linkbtn">Ohne Fotos erfassen</button>
       </div>
+    </div>
+  </dialog>
+
+  <!-- Frontbild zuschneiden: Ecken verschieben -->
+  <dialog id="cropDialog" class="viewer crop">
+    <p class="crop-hint">Ecken oder Rahmen verschieben, sodass nur die Packung drin ist.</p>
+    <div class="crop-stage" id="cropStage">
+      <div class="crop-wrap" id="cropWrap">
+        <img id="cropImg" alt="">
+        <div class="crop-box" id="cropBox">
+          <span class="h" data-h="nw"></span><span class="h" data-h="ne"></span>
+          <span class="h" data-h="sw"></span><span class="h" data-h="se"></span>
+        </div>
+      </div>
+    </div>
+    <div class="crop-foot">
+      <button type="button" id="cropCancel" class="btn">Abbrechen</button>
+      <button type="button" id="cropReset" class="btn">Ganzes Bild</button>
+      <button type="button" id="cropApply" class="btn primary">Übernehmen</button>
     </div>
   </dialog>
 
