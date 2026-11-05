@@ -107,3 +107,21 @@ export async function cropImage(blob, rect, quality = 0.88) {
   c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
   return new Promise(res => c.toBlob(res, 'image/jpeg', quality));
 }
+
+/**
+ * Macht aus einem Rahmen (Anteile 0..1) ein Quadrat in Bildpixeln: gleicher Mittelpunkt,
+ * Seite = längere Seite des Rahmens, höchstens so gross wie das Bild, ins Bild verschoben.
+ */
+export function squareRect(rect, W, H) {
+  const cx = (rect.l + rect.r) / 2 * W, cy = (rect.t + rect.b) / 2 * H;
+  const side = Math.min(Math.max((rect.r - rect.l) * W, (rect.b - rect.t) * H), W, H);
+  const x = Math.min(W - side, Math.max(0, cx - side / 2));
+  const y = Math.min(H - side, Math.max(0, cy - side / 2));
+  return { l: x / W, t: y / H, r: (x + side) / W, b: (y + side) / H };
+}
+
+/** Quadratischer Zuschnitt um den Rahmen. Liefert JPEG-Blob. */
+export async function cropSquare(blob, rect, quality = 0.88) {
+  const img = await createImageBitmap(blob);
+  return cropImage(blob, squareRect(rect, img.width, img.height), quality);
+}
