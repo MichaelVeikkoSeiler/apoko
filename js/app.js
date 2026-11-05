@@ -277,9 +277,10 @@ const pick = { m: null, y: null };
 
 function pickerYears() {
   const now = new Date().getFullYear();
-  const years = Array.from({ length: 6 }, (_, i) => now - 1 + i); // letztes Jahr bis 4 Jahre voraus
+  // neuestes Jahr = in 4 Jahren (heute 2030), dann 12 Jahre zurück; absteigend
+  const years = Array.from({ length: 12 }, (_, i) => now + 4 - i);
   if (pick.y && !years.includes(pick.y)) years.push(pick.y);
-  return years.sort((a, b) => a - b);
+  return years.sort((a, b) => b - a);
 }
 
 function renderPicker() {
