@@ -36,7 +36,7 @@ const SAVE_TOOL = {
   input_schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['name', 'hersteller', 'menge', 'einheit', 'darreichungsform', 'art', 'anwendung_allgemein', 'produktinfo', 'rezeptpflichtig', 'quellen'],
+    required: ['name', 'hersteller', 'menge', 'einheit', 'darreichungsform', 'art', 'anwendung_allgemein', 'produktinfo', 'rezeptpflichtig', 'quellen', 'frontbild_rahmen'],
     properties: {
       name: { type: 'string', description: 'Handelsname wie auf der Packung, inkl. Stärke und Form, z. B. "Dafalgan 500 mg, Tabletten"' },
       hersteller: { type: 'string', description: 'Hersteller bzw. Zulassungsinhaberin, z. B. "Bayer (Schweiz) AG"' },
@@ -48,6 +48,15 @@ const SAVE_TOOL = {
       produktinfo: { type: 'string', description: '3 bis 5 kurze Stichpunkte (je Zeile mit "• "), einfache Sprache: Wofür genau, Wirkstoffe verständlich erklärt, wichtige Hinweise (z. B. Altersgrenze, nicht in der Schwangerschaft). Keine Dosierung, keine Lagertemperatur.' },
       rezeptpflichtig: { type: 'string', enum: ['ja', 'nein', 'unbekannt'] },
       quellen: { type: 'string', description: 'Die genutzten Webseiten (URLs), durch Leerzeichen getrennt' },
+      frontbild_rahmen: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['links', 'oben', 'rechts', 'unten'],
+        description: 'Rahmen um die Verpackung auf dem ERSTEN Foto, in Prozent der Bildbreite bzw. -höhe (0 bis 100), möglichst eng: nur die Packung, ohne Hand und Hintergrund. Ist keine Packung erkennbar: 0, 0, 100, 100.',
+        properties: {
+          links: { type: 'number' }, oben: { type: 'number' }, rechts: { type: 'number' }, unten: { type: 'number' },
+        },
+      },
     },
   },
 };
@@ -58,7 +67,8 @@ ${Object.keys(known).length ? `Bereits bekannt (aus Strichcode und der Swissmedi
 Aufgabe:
 1. Erkenne das Produkt anhand aller Fotos (Name, Hersteller, Packungsinhalt wie "100 ml" oder "20 Tabletten").
 2. Recherchiere mit der Websuche die wichtigsten Angaben, bevorzugt aus offiziellen Quellen (Swissmedic, compendium.ch, Herstellerseite). Kläre auch, ob es ein pflanzliches Arzneimittel ist.
-3. Rufe am Schluss genau einmal das Werkzeug produkt_speichern auf.
+3. Bestimme auf dem ersten Foto den Rahmen um die Verpackung (für den Zuschnitt des Produktbilds).
+4. Rufe am Schluss genau einmal das Werkzeug produkt_speichern auf.
 
 Regeln: Nur Angaben, die auf den Fotos stehen oder in seriösen Quellen belegt sind; was unklar ist, leer lassen. Deutsch und einfach formulieren. Keine Dosierungsempfehlungen und keine Lagertemperatur.`;
 }

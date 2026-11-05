@@ -486,6 +486,7 @@ function renderGallery() {
     <div class="gtile">
       <button type="button" class="gimg" data-view="${n}"><img src="${esc(t.url || '')}" alt="" referrerpolicy="no-referrer"></button>
       ${n === 0 ? '<span class="gbadge">Front</span>' : '<span class="gbadge info">nur Info</span>'}
+      ${n === 0 && !t.official ? `<button type="button" class="gcrop" data-crop="${t.idx}" aria-label="Zuschneiden">✂️</button>` : ''}
       ${t.official ? '<span class="gbadge src">offiziell</span>' : ''}
       <button type="button" class="gdel" ${t.official ? 'data-del-official' : `data-del-photo="${t.idx}"`} aria-label="Bild entfernen">✕</button>
     </div>`).join('') + `
@@ -528,6 +529,8 @@ $('#gallery').addEventListener('click', e => {
     return renderGallery();
   }
   if (e.target.closest('[data-del-official]')) { F.imageUrl.value = ''; return renderGallery(); }
+  const c = e.target.closest('[data-crop]');
+  if (c) return openCrop(+c.dataset.crop);
   const v = e.target.closest('[data-view]');
   if (v) {
     const list = [];
@@ -848,6 +851,7 @@ function quantityFromText(text) {
 
 /** Wertet alle Fotos aus: Strichcode, Text (Menge, Name, pflanzlich) und – falls eingerichtet – die KI-Recherche. */
 async function analyzeAll(shots) {
+  const firstNew = gallery.length - shots.length; // Index des ersten neuen Fotos in der Galerie
   const info = $('#scanInfo');
   info.hidden = false;
   $('#suggestions').hidden = true;
@@ -878,7 +882,7 @@ async function analyzeAll(shots) {
     }
     // 3. KI-Recherche mit Websuche (optional)
     if (getApiKey()) {
-      await runResearch(bigs);
+      await runResearch(bigs, firstNew);
     } else if (!F.name.value && frontText.trim()) {
       renderSuggestions(await searchByText(frontText), frontText);
     } else {
@@ -891,7 +895,7 @@ async function analyzeAll(shots) {
   }
 }
 
-async function runResearch(bigs) {
+async function runResearch(bigs, firstNew = 0) {
   const info = $('#scanInfo');
   const known = {};
   for (const [k, label] of [['name', 'name'], ['manufacturer', 'hersteller'], ['usage', 'anwendung']]) if (F[k].value) known[label] = F[k].value;
@@ -909,6 +913,22 @@ async function runResearch(bigs) {
     if (!formTouched && !F.atc.value && r.darreichungsform && FORMS.some(f => f.id === r.darreichungsform)) { F.form.value = r.darreichungsform; updateFormHint(); }
     if (r.art && (!F.productType.value || r.art === 'pflanzlich')) { F.productType.value = r.art; done.push('Art'); }
     setIf(F.usage, r.anwendung_allgemein, 'Anwendung', looksFrench(F.usage.value));
+    // Frontbild auf die Packung zuschneiden (nur wenn das erste neue Foto auch das Frontbild ist)
+    const fr = r.frontbild_rahmen;
+    if (fr && firstNew === 0 && gallery[0] && !F.imageUrl.value) {
+      let l = fr.links / 100, t = fr.oben / 100, rr = fr.rechts / 100, b = fr.unten / 100;
+      if (rr - l > 0.1 && b - t > 0.1 && (rr - l) * (b - t) < 0.92) {
+        const m = 0.02; // etwas Rand lassen
+        const src = gallery[0].blob || await photos.getPhoto(gallery[0].key);
+        const cut = src && await photos.cropImage(src, { l: l - m, t: t - m, r: rr + m, b: b + m });
+        if (cut) {
+          if (gallery[0].key) removedKeys.push(gallery[0].key);
+          gallery[0] = { blob: cut, url: URL.createObjectURL(cut) };
+          renderGallery();
+          done.push('Frontbild zugeschnitten');
+        }
+      }
+    }
     if (r.produktinfo) {
       const src = r.quellen ? `\nQuellen: ${r.quellen}` : '';
       F.info.value = [F.info.value, r.produktinfo.trim() + src].filter(Boolean).join('\n');
@@ -974,6 +994,73 @@ function renderSuggestions(hits, text) {
     updateFormHint(); updateRxWarn();
   };
 }
+
+// ---------- Frontbild zuschneiden ----------
+const cropDlg = $('#cropDialog');
+const crop = { idx: null, blob: null, rect: { l: 0, t: 0, r: 1, b: 1 }, drag: null };
+
+function layoutCrop() {
+  const r = crop.rect, box = $('#cropBox');
+  box.style.left = r.l * 100 + '%'; box.style.top = r.t * 100 + '%';
+  box.style.width = (r.r - r.l) * 100 + '%'; box.style.height = (r.b - r.t) * 100 + '%';
+}
+
+async function openCrop(idx) {
+  const g = gallery[idx];
+  if (!g) return;
+  const blob = g.blob || await photos.getPhoto(g.key);
+  if (!blob) return toast('Foto nicht gefunden.');
+  crop.idx = idx; crop.blob = blob;
+  crop.rect = { l: 0.04, t: 0.04, r: 0.96, b: 0.96 };
+  const img = $('#cropImg');
+  img.src = URL.createObjectURL(blob);
+  await img.decode().catch(() => {});
+  cropDlg.showModal();
+  layoutCrop();
+}
+
+$('#cropStage').addEventListener('pointerdown', e => {
+  const handle = e.target.closest('[data-h]')?.dataset.h;
+  const inBox = e.target.closest('#cropBox');
+  if (!handle && !inBox) return;
+  e.preventDefault();
+  $('#cropStage').setPointerCapture(e.pointerId);
+  const w = $('#cropWrap').getBoundingClientRect();
+  crop.drag = { mode: handle || 'move', x0: e.clientX, y0: e.clientY, w: w.width, h: w.height, start: { ...crop.rect }, id: e.pointerId };
+});
+$('#cropStage').addEventListener('pointermove', e => {
+  const d = crop.drag;
+  if (!d || e.pointerId !== d.id) return;
+  const dx = (e.clientX - d.x0) / d.w, dy = (e.clientY - d.y0) / d.h;
+  const s = d.start, MIN = 0.08, cl = v => Math.min(1, Math.max(0, v));
+  const r = { ...s };
+  if (d.mode === 'move') {
+    const w = s.r - s.l, h = s.b - s.t;
+    r.l = Math.min(1 - w, Math.max(0, s.l + dx)); r.r = r.l + w;
+    r.t = Math.min(1 - h, Math.max(0, s.t + dy)); r.b = r.t + h;
+  } else {
+    if (d.mode.includes('w')) r.l = Math.min(cl(s.l + dx), s.r - MIN);
+    if (d.mode.includes('e')) r.r = Math.max(cl(s.r + dx), s.l + MIN);
+    if (d.mode.includes('n')) r.t = Math.min(cl(s.t + dy), s.b - MIN);
+    if (d.mode.includes('s')) r.b = Math.max(cl(s.b + dy), s.t + MIN);
+  }
+  crop.rect = r;
+  layoutCrop();
+});
+const endCropDrag = e => { if (crop.drag?.id === e.pointerId) crop.drag = null; };
+$('#cropStage').addEventListener('pointerup', endCropDrag);
+$('#cropStage').addEventListener('pointercancel', endCropDrag);
+$('#cropCancel').addEventListener('click', () => cropDlg.close());
+$('#cropReset').addEventListener('click', () => { crop.rect = { l: 0, t: 0, r: 1, b: 1 }; layoutCrop(); });
+$('#cropApply').addEventListener('click', async () => {
+  const cut = await photos.cropImage(crop.blob, crop.rect);
+  const g = gallery[crop.idx];
+  if (g?.key) removedKeys.push(g.key);
+  gallery[crop.idx] = { blob: cut, url: URL.createObjectURL(cut) };
+  cropDlg.close();
+  renderGallery();
+  toast('Zugeschnitten. Wird beim Speichern übernommen.');
+});
 
 // ---------- Bildansicht (vergrössern) ----------
 const viewer = $('#viewer');

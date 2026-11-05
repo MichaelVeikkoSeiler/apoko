@@ -417,3 +417,22 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .badge.expired { background: var(--st-bad); }
 .stat.soon b { color: var(--st-warn); }
 .stat.expired b { color: var(--st-bad); }
+
+/* Zuschneiden */
+.crop[open] { display: flex; flex-direction: column; }
+.crop-hint { color: #fff; text-align: center; margin: 0; padding: calc(12px + env(safe-area-inset-top)) 16px 8px; font-size: .9rem; }
+.crop-stage { flex: 1; display: grid; place-items: center; overflow: hidden; padding: 12px; touch-action: none; }
+.crop-wrap { position: relative; display: inline-block; line-height: 0; }
+.crop-wrap img { max-width: calc(100vw - 24px); max-height: calc(100dvh - 190px); user-select: none; -webkit-user-drag: none; }
+.crop-box { position: absolute; border: 2px solid #fff; box-shadow: 0 0 0 100vmax rgb(0 0 0 / .55); cursor: move; touch-action: none; }
+.crop-box .h { position: absolute; width: 28px; height: 28px; background: #fff; border-radius: 50%; border: 3px solid var(--primary); touch-action: none; }
+.crop-box .h[data-h="nw"] { left: -14px; top: -14px; } .crop-box .h[data-h="ne"] { right: -14px; top: -14px; }
+.crop-box .h[data-h="sw"] { left: -14px; bottom: -14px; } .crop-box .h[data-h="se"] { right: -14px; bottom: -14px; }
+.crop-foot { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); background: #111; }
+.crop-foot .btn { background: #222; color: #fff; border-color: #333; }
+.crop-foot .btn.primary { background: var(--primary); border-color: var(--primary); }
+.gcrop { position: absolute; left: 3px; top: 3px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgb(0 0 0 / .55); color: #fff; font-size: .9rem; line-height: 1; cursor: pointer; padding: 0; }
+
+/* Hinweise und Zahlen ganz unten im Vorrat */
+.inv-foot { margin-top: 18px; padding-bottom: 80px; }
+.inv-foot #alerts:empty { display: none; }

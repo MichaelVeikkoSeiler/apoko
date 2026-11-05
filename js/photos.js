@@ -94,3 +94,16 @@ export const blobToDataUrl = blob => new Promise(resolve => {
 });
 
 export const dataUrlToBlob = url => fetch(url).then(r => r.blob());
+
+/** Schneidet ein Bild zu. rect in Anteilen 0..1: { l, t, r, b }. Liefert JPEG-Blob. */
+export async function cropImage(blob, rect, quality = 0.88) {
+  const img = await createImageBitmap(blob);
+  const clamp = v => Math.min(1, Math.max(0, v));
+  const l = clamp(rect.l), t = clamp(rect.t), r = clamp(rect.r), b = clamp(rect.b);
+  const sx = Math.round(l * img.width), sy = Math.round(t * img.height);
+  const sw = Math.max(1, Math.round((r - l) * img.width)), sh = Math.max(1, Math.round((b - t) * img.height));
+  const c = document.createElement('canvas');
+  c.width = sw; c.height = sh;
+  c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+  return new Promise(res => c.toBlob(res, 'image/jpeg', quality));
+}
