@@ -12,13 +12,14 @@ Apoko ist eine Web-App (PWA) fürs Handy. Sie zeigt dir, welche Medikamente du z
 - **Erfassen**: Name, Wirkstoff, Stärke, Darreichungsform, Packungsgrösse und Restmenge (Stück, ml, g, Dosen …), Ablaufdatum (Monat/Jahr), Lagerort, Person, Charge, Notizen.
 - **Ablaufdatum** nur als Monat/Jahr (gilt bis Monatsende), per Live-Kamera, Foto oder DataMatrix-Code.
 - **Rezeptpflicht**: Schalter „Rezeptpflichtig“, dazu optional die Schweizer Abgabekategorie (A/B = Rezept, D/E = rezeptfrei).
+- **Farben**: grün haltbar, orange bald ablaufend oder seit höchstens 12 Monaten abgelaufen, rot länger abgelaufen.
 - **Übersicht und Filter**: abgelaufen / läuft bald ab (unter 90 Tagen) / rezeptpflichtig / rezeptfrei / geteilt / nicht geteilt, dazu eine Volltextsuche.
 - **Teilen mit anderen Haushalten**:
   - Pro Artikel wählst du, ob er geteilt wird. Abgelaufene Artikel und private Notizen werden nie geteilt.
   - Beim Teilen von rezeptpflichtigen Medikamenten zeigt die App eine Warnung.
   - Die App erzeugt einen **QR-Code bzw. Link**. Der andere Haushalt scannt bzw. öffnet ihn und ist damit verbunden. Danach kann er suchen: „Wer hat Ibuprofen?“
   - Für einen neuen Stand teilst du einfach noch einmal. Beim Empfänger wird der Eintrag dann aktualisiert.
-- **Erfassen mit Fotos**: „+ Erfassen“ öffnet die Kamera. Zuerst die wichtigste Seite fotografieren, dann weitere relevante Seiten, dann „Abschliessen“. Das erste Foto wird das Artikelbild. Aus allen Fotos liest die App Strichcode (→ Swissmedic: Name, Hersteller, Menge, Art z. B. pflanzlich, Anwendung) und Text (Menge, Name).
+- **Erfassen**: „+ Erfassen“ öffnet zuerst den Strichcode-Scanner (legt Name, Hersteller, Menge usw. gleich ab), danach automatisch die Fotokamera. Zuerst die wichtigste Seite fotografieren, dann weitere relevante Seiten, dann „Abschliessen“. Das erste Foto wird das Artikelbild. Aus allen Fotos liest die App Strichcode (→ Swissmedic: Name, Hersteller, Menge, Art z. B. pflanzlich, Anwendung) und Text (Menge, Name).
 - **KI-Recherche (optional)**: Mit eigenem Claude-API-Schlüssel (Einstellungen) recherchiert Claude anhand der Fotos im Web und ergänzt Hersteller, Art, Menge, „Anwendung (allgemein)“ und eine kurze Produktinfo mit Quellen. Die Fotos gehen dafür an Anthropic; der Schlüssel bleibt auf dem Gerät.
 - **Beschwerden**: Beschwerden eintippen oder antippen (z. B. Kopfschmerzen, Durchfall, Insektenstich). Die App zeigt passende, nicht abgelaufene Mittel aus dem Vorrat samt Standort, trennt rezeptpflichtige ab, nennt Warnzeichen („sofort 144 bei …“) und einen Tipp. Ist nichts im Haus, zeigt sie, wonach man in der Apotheke fragen kann und ob ein verbundener Haushalt etwas hat. Zuordnung über den ATC-Code. Ablauf: Beschwerden → „Weiter: Für wen?“ → Person (Mann, Frau, Kind 1, Kind 2 mit Alter und Gewicht, unter Einstellungen anpassbar). Für Kinder gelten Grundregeln: kein Aspirin unter 16, kein Loperamid und Codein unter 12, Erwachsenenstärken werden markiert; rezeptpflichtige Mittel nur für die Person, für die sie verschrieben sind. Keine Diagnose, keine Dosierung.
 - **Checkliste**: Grundausstattung einer Hausapotheke, abgeglichen mit deinem Vorrat.

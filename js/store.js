@@ -170,5 +170,8 @@ export function expiryStatus(item) {
   const end = new Date(eff.date + 'T00:00:00');
   const days = Math.round((end - today()) / DAY);
   const status = days < 0 ? 'expired' : days <= SOON_DAYS ? 'soon' : 'ok';
-  return { status, days, eff };
+  // Abgelaufen, aber höchstens 12 Monate: wird orange statt rot angezeigt
+  const limit = new Date(end); limit.setFullYear(limit.getFullYear() + 1);
+  const recent = status === 'expired' && today() <= limit;
+  return { status, days, eff, recent };
 }

@@ -375,3 +375,6 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .person-row .pi { font-size: 1.5rem; text-align: center; }
 .person-row .conf { grid-column: 2 / -1; font-size: .8rem; color: var(--muted); display: flex; align-items: center; gap: 6px; margin: 0; }
 .person-row .conf input { width: 18px; height: 18px; min-height: 0; }
+/* Abgelaufen, aber höchstens 12 Monate: orange */
+.item.expired.recent { border-left-color: var(--warn); }
+.badge.expired.recent { background: var(--warn-soft); color: var(--warn); }
