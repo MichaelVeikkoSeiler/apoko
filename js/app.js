@@ -572,6 +572,7 @@ function openItem(item) {
   updateFormHint();
   updateRxWarn();
   dlg.showModal();
+  $('.sheet-body', dlg).scrollTop = 0; // immer zuoberst beginnen
   if (isNew) $('#btnScan').focus();
 }
 
@@ -1019,7 +1020,8 @@ async function openCrop(idx) {
   await img.decode().catch(() => {});
   crop.W = img.naturalWidth || 1; crop.H = img.naturalHeight || 1;
   // Start: grösstes Quadrat in der Mitte, mit etwas Rand
-  crop.rect = photos.squareRect({ l: 0.04, t: 0.04, r: 0.96, b: 0.96 }, crop.W, crop.H);
+  const side = 0.75 * Math.min(crop.W, crop.H); // Quadrat in der Mitte, Ecken gut greifbar
+  crop.rect = photos.squareRect({ l: 0.5 - side / 2 / crop.W, t: 0.5 - side / 2 / crop.H, r: 0.5 + side / 2 / crop.W, b: 0.5 + side / 2 / crop.H }, crop.W, crop.H);
   cropDlg.showModal();
   layoutCrop();
 }
