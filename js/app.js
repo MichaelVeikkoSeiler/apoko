@@ -999,14 +999,44 @@ function renderSuggestions(hits, text) {
   };
 }
 
-// ---------- Frontbild zuschneiden ----------
+// ---------- Frontbild zuschneiden (quadratisch, drehbar) ----------
+// Zustand in Bildpixeln: Mittelpunkt (cx, cy), Seitenlänge, Drehwinkel in Grad.
 const cropDlg = $('#cropDialog');
-const crop = { idx: null, blob: null, rect: { l: 0, t: 0, r: 1, b: 1 }, drag: null };
+const crop = { idx: null, blob: null, W: 1, H: 1, cx: 0, cy: 0, side: 0, angle: 0, drag: null };
+const rad = a => a * Math.PI / 180;
+const extent = () => crop.side / 2 * (Math.abs(Math.cos(rad(crop.angle))) + Math.abs(Math.sin(rad(crop.angle))));
+
+/** Quadrat ganz im Bild halten (erst Grösse, dann Lage). */
+function fitCrop() {
+  const k = Math.abs(Math.cos(rad(crop.angle))) + Math.abs(Math.sin(rad(crop.angle)));
+  crop.side = Math.max(24, Math.min(crop.side, Math.min(crop.W, crop.H) / k));
+  const e = extent();
+  crop.cx = Math.min(crop.W - e, Math.max(e, crop.cx));
+  crop.cy = Math.min(crop.H - e, Math.max(e, crop.cy));
+}
 
 function layoutCrop() {
-  const r = crop.rect, box = $('#cropBox');
-  box.style.left = r.l * 100 + '%'; box.style.top = r.t * 100 + '%';
-  box.style.width = (r.r - r.l) * 100 + '%'; box.style.height = (r.b - r.t) * 100 + '%';
+  const box = $('#cropBox'), s = $('#cropWrap').clientWidth / crop.W; // Anzeige-Massstab
+  box.style.width = box.style.height = crop.side * s + 'px';
+  box.style.left = (crop.cx - crop.side / 2) * s + 'px';
+  box.style.top = (crop.cy - crop.side / 2) * s + 'px';
+  box.style.transform = `rotate(${crop.angle}deg)`;
+  $('#cropAngle').value = crop.angle;
+  $('#cropAngleVal').textContent = `${crop.angle > 0 ? '+' : ''}${crop.angle}°`;
+}
+
+async function loadCropImage(blob) {
+  crop.blob = blob;
+  const img = $('#cropImg');
+  img.src = URL.createObjectURL(blob);
+  await img.decode().catch(() => {});
+  crop.W = img.naturalWidth || 1; crop.H = img.naturalHeight || 1;
+}
+
+function centerCrop(f = 0.75) {
+  crop.cx = crop.W / 2; crop.cy = crop.H / 2;
+  crop.side = f * Math.min(crop.W, crop.H); // Ecken gut greifbar, nicht am Rand
+  fitCrop();
 }
 
 async function openCrop(idx) {
@@ -1014,14 +1044,9 @@ async function openCrop(idx) {
   if (!g) return;
   const blob = g.blob || await photos.getPhoto(g.key);
   if (!blob) return toast('Foto nicht gefunden.');
-  crop.idx = idx; crop.blob = blob;
-  const img = $('#cropImg');
-  img.src = URL.createObjectURL(blob);
-  await img.decode().catch(() => {});
-  crop.W = img.naturalWidth || 1; crop.H = img.naturalHeight || 1;
-  // Start: grösstes Quadrat in der Mitte, mit etwas Rand
-  const side = 0.75 * Math.min(crop.W, crop.H); // Quadrat in der Mitte, Ecken gut greifbar
-  crop.rect = photos.squareRect({ l: 0.5 - side / 2 / crop.W, t: 0.5 - side / 2 / crop.H, r: 0.5 + side / 2 / crop.W, b: 0.5 + side / 2 / crop.H }, crop.W, crop.H);
+  crop.idx = idx; crop.angle = 0;
+  await loadCropImage(blob);
+  centerCrop();
   cropDlg.showModal();
   layoutCrop();
 }
@@ -1032,40 +1057,43 @@ $('#cropStage').addEventListener('pointerdown', e => {
   if (!handle && !inBox) return;
   e.preventDefault();
   $('#cropStage').setPointerCapture(e.pointerId);
-  const w = $('#cropWrap').getBoundingClientRect();
-  crop.drag = { mode: handle || 'move', x0: e.clientX, y0: e.clientY, w: w.width, h: w.height, start: { ...crop.rect }, id: e.pointerId };
+  crop.drag = { mode: handle ? 'size' : 'move', x0: e.clientX, y0: e.clientY, cx: crop.cx, cy: crop.cy, id: e.pointerId,
+    s: $('#cropWrap').clientWidth / crop.W, wrap: $('#cropWrap').getBoundingClientRect() };
 });
 $('#cropStage').addEventListener('pointermove', e => {
   const d = crop.drag;
   if (!d || e.pointerId !== d.id) return;
-  const dx = (e.clientX - d.x0) / d.w, dy = (e.clientY - d.y0) / d.h;
-  const s = d.start, MIN = 0.08;
-  const r = { ...s };
   if (d.mode === 'move') {
-    const w = s.r - s.l, h = s.b - s.t;
-    r.l = Math.min(1 - w, Math.max(0, s.l + dx)); r.r = r.l + w;
-    r.t = Math.min(1 - h, Math.max(0, s.t + dy)); r.b = r.t + h;
+    crop.cx = d.cx + (e.clientX - d.x0) / d.s;
+    crop.cy = d.cy + (e.clientY - d.y0) / d.s;
   } else {
-    // Quadrat: gegenüberliegende Ecke bleibt fest, Seite folgt dem Finger (in Bildschirmpixeln)
-    const W = d.w, H = d.h, west = d.mode.includes('w'), north = d.mode.includes('n');
-    const ax = (west ? s.r : s.l) * W, ay = (north ? s.b : s.t) * H;       // feste Ecke
-    const px = (west ? s.l : s.r) * W + dx * W, py = (north ? s.t : s.b) * H + dy * H;
-    const maxSide = Math.min(west ? ax : W - ax, north ? ay : H - ay);
-    const side = Math.min(maxSide, Math.max(MIN * Math.min(W, H), Math.abs(px - ax), Math.abs(py - ay)));
-    r.l = (west ? ax - side : ax) / W; r.r = (west ? ax : ax + side) / W;
-    r.t = (north ? ay - side : ay) / H; r.b = (north ? ay : ay + side) / H;
+    // Ecke ziehen: Grösse um den Mittelpunkt, im gedrehten Quadrat gemessen
+    const px = (e.clientX - d.wrap.left) / d.s - crop.cx, py = (e.clientY - d.wrap.top) / d.s - crop.cy;
+    const c = Math.cos(rad(-crop.angle)), sn = Math.sin(rad(-crop.angle));
+    const u = px * c - py * sn, v = px * sn + py * c;
+    crop.side = 2 * Math.max(Math.abs(u), Math.abs(v));
+    const k = Math.abs(Math.cos(rad(crop.angle))) + Math.abs(Math.sin(rad(crop.angle)));
+    crop.side = Math.min(crop.side, 2 * Math.min(crop.cx, crop.W - crop.cx, crop.cy, crop.H - crop.cy) / k);
   }
-  crop.rect = r;
+  fitCrop();
   layoutCrop();
 });
 const endCropDrag = e => { if (crop.drag?.id === e.pointerId) crop.drag = null; };
 $('#cropStage').addEventListener('pointerup', endCropDrag);
 $('#cropStage').addEventListener('pointercancel', endCropDrag);
+$('#cropAngle').addEventListener('input', e => { crop.angle = +e.target.value; fitCrop(); layoutCrop(); });
+$('#cropRot90').addEventListener('click', async () => {
+  // Ganzes Foto um 90° im Uhrzeigersinn drehen (z. B. wenn die Packung quer liegt)
+  const { cx, cy } = crop, H = crop.H;
+  await loadCropImage(await photos.rotate90(crop.blob));
+  crop.cx = H - cy; crop.cy = cx;
+  fitCrop(); layoutCrop();
+});
 $('#btnCrop').addEventListener('click', () => openCrop(0));
 $('#cropCancel').addEventListener('click', () => cropDlg.close());
-$('#cropReset').addEventListener('click', () => { crop.rect = photos.squareRect({ l: 0, t: 0, r: 1, b: 1 }, crop.W, crop.H); layoutCrop(); });
+$('#cropReset').addEventListener('click', () => { crop.angle = 0; centerCrop(1); layoutCrop(); });
 $('#cropApply').addEventListener('click', async () => {
-  const cut = await photos.cropSquare(crop.blob, crop.rect);
+  const cut = await photos.cropRotated(crop.blob, crop);
   const g = gallery[crop.idx];
   if (g?.key) removedKeys.push(g.key);
   gallery[crop.idx] = { blob: cut, url: URL.createObjectURL(cut) };
@@ -1400,6 +1428,37 @@ function renderHelp() {
 function backToInput() { helpStep = 'input'; renderHelp(); }
 
 let helpTimer;
+// ---- Beschwerden per Sprache (Spracherkennung des Browsers, Deutsch) ----
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+if (SpeechRec) {
+  $('#btnMic').hidden = false;
+  $('#btnMic').addEventListener('click', () => {
+    if (rec) return rec.stop();
+    rec = new SpeechRec();
+    rec.lang = 'de-CH';
+    rec.interimResults = true;
+    rec.continuous = false;
+    const before = $('#complaint').value.trim();
+    rec.onstart = () => { $('#btnMic').classList.add('on'); $('#micStatus').hidden = false; $('#micStatus').textContent = '🎙️ Ich höre zu … sprich jetzt.'; };
+    rec.onresult = ev => {
+      const said = Array.from(ev.results).map(r => r[0].transcript).join(' ').trim();
+      $('#complaint').value = [before, said].filter(Boolean).join(', ');
+      $('#complaint').dispatchEvent(new Event('input'));
+    };
+    rec.onerror = ev => {
+      $('#micStatus').textContent = ev.error === 'not-allowed' ? 'Mikrofon nicht erlaubt. In den Browser-Einstellungen freigeben.'
+        : ev.error === 'no-speech' ? 'Nichts gehört. Nochmals auf 🎤 tippen.' : 'Spracherkennung nicht möglich (' + ev.error + ').';
+    };
+    rec.onend = () => {
+      $('#btnMic').classList.remove('on');
+      if (/zuhören|höre/.test($('#micStatus').textContent)) $('#micStatus').hidden = true;
+      rec = null;
+    };
+    try { rec.start(); } catch { rec = null; }
+  });
+}
+
 $('#complaint').addEventListener('input', () => {
   clearTimeout(helpTimer);
   helpTimer = setTimeout(() => { if (helpStep !== 'input') helpStep = 'input'; renderHelp(); }, 250);

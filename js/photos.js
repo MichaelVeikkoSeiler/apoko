@@ -125,3 +125,25 @@ export async function cropSquare(blob, rect, quality = 0.88) {
   const img = await createImageBitmap(blob);
   return cropImage(blob, squareRect(rect, img.width, img.height), quality);
 }
+
+/** Dreht ein Bild um 90° im Uhrzeigersinn. */
+export async function rotate90(blob) {
+  const img = await createImageBitmap(blob);
+  const c = document.createElement('canvas');
+  c.width = img.height; c.height = img.width;
+  const g = c.getContext('2d');
+  g.translate(c.width, 0); g.rotate(Math.PI / 2); g.drawImage(img, 0, 0);
+  return new Promise(res => c.toBlob(res, 'image/jpeg', 0.92));
+}
+
+/** Quadratischer, gedrehter Ausschnitt: { cx, cy, side, angle } in Bildpixeln/Grad. */
+export async function cropRotated(blob, { cx, cy, side, angle }, quality = 0.88) {
+  const img = await createImageBitmap(blob);
+  const S = Math.max(1, Math.round(side));
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, S, S);
+  g.translate(S / 2, S / 2); g.rotate(-angle * Math.PI / 180); g.drawImage(img, -cx, -cy);
+  return new Promise(res => c.toBlob(res, 'image/jpeg', quality));
+}

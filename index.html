@@ -98,7 +98,11 @@
       <div class="card">
         <h2>Was hast du für Beschwerden?</h2>
         <p class="muted small">Die App sucht in deinem Vorrat, was passt. Keine Diagnose: Packungsbeilage beachten, im Zweifel Apotheke oder Ärztin fragen.</p>
-        <textarea id="complaint" rows="2" placeholder="z. B. Kopfweh und etwas Fieber"></textarea>
+        <div class="complaint-row">
+          <textarea id="complaint" rows="2" placeholder="z. B. Kopfweh und etwas Fieber"></textarea>
+          <button type="button" id="btnMic" class="mic-btn" aria-label="Sprechen" hidden>🎤</button>
+        </div>
+        <p id="micStatus" class="muted small" hidden></p>
         <div id="symptomChips" class="chips wrap"></div>
       </div>
       <div id="personPick" class="card" hidden>
@@ -342,7 +346,7 @@
 
   <!-- Frontbild zuschneiden: Ecken verschieben -->
   <dialog id="cropDialog" class="viewer crop">
-    <p class="crop-hint">Quadrat auf die Packung schieben, an den Ecken grösser oder kleiner ziehen.</p>
+    <p class="crop-hint">Quadrat auf die Packung schieben, an den Ecken grösser oder kleiner ziehen. Mit dem Regler drehen.</p>
     <div class="crop-stage" id="cropStage">
       <div class="crop-wrap" id="cropWrap">
         <img id="cropImg" alt="">
@@ -351,6 +355,11 @@
           <span class="h" data-h="sw"></span><span class="h" data-h="se"></span>
         </div>
       </div>
+    </div>
+    <div class="crop-rot">
+      <button type="button" id="cropRot90" class="btn">↻ 90°</button>
+      <input type="range" id="cropAngle" min="-45" max="45" step="1" value="0" aria-label="Drehen">
+      <span id="cropAngleVal">0°</span>
     </div>
     <div class="crop-foot">
       <button type="button" id="cropCancel" class="btn">Abbrechen</button>
