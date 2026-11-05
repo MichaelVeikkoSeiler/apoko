@@ -1172,7 +1172,7 @@ function recRow(item, st, { linkedName = '', expired = false, note = '', blocked
 let helpStep = 'input';
 let helpPerson = null;
 
-const personText = p => `${p.age} J · ${p.weight} kg`;
+const personText = p => [`${p.age} J`, `${p.weight} kg`, p.height ? `${p.height} cm` : ''].filter(Boolean).join(' · ');
 
 function currentSymptomIds() {
   const detected = detectSymptoms($('#complaint').value);
@@ -1288,24 +1288,51 @@ $('#adviceResult').addEventListener('click', e => {
 });
 
 // ---------- Personen (Einstellungen) ----------
+const PERSON_EMOJIS = ['👨', '👩', '🧔', '👱‍♂️', '👱‍♀️', '👨‍🦰', '👩‍🦰', '👨‍🦱', '👩‍🦱', '👨‍🦳', '👩‍🦳', '👴', '👵', '🧑', '🧒', '👦', '👧', '👶', '🙂', '😎', '🤓', '🦸', '🐶', '🐱'];
+let emojiOpenFor = null;
+
 function renderPeople() {
+  const num = v => (v == null || v === '' ? '' : esc(String(v)));
   $('#peopleList').innerHTML = store.getState().people.map(p => `
     <div class="person-row" data-pid="${esc(p.id)}">
-      <span class="pi">${p.icon || '🙂'}</span>
-      <input data-f="label" value="${esc(p.label)}" aria-label="Bezeichnung">
-      <input data-f="age" type="number" step="0.5" min="0" max="120" inputmode="decimal" value="${esc(String(p.age))}" aria-label="Alter in Jahren" title="Alter (Jahre)">
-      <input data-f="weight" type="number" step="0.5" min="1" max="300" inputmode="decimal" value="${esc(String(p.weight))}" aria-label="Gewicht in kg" title="Gewicht (kg)">
-      <label class="conf"><input type="checkbox" data-f="confirmed" ${p.confirmed ? 'checked' : ''}> Jahre / kg ${p.confirmed ? 'bestätigt' : 'noch nicht bestätigt'}</label>
+      <div class="person-head">
+        <button type="button" class="pi" data-emoji-toggle aria-label="Emoji wählen" title="Emoji wählen">${p.icon || '🙂'}</button>
+        <input data-f="label" value="${esc(p.label)}" aria-label="Name">
+      </div>
+      ${emojiOpenFor === p.id ? `<div class="emoji-grid">${PERSON_EMOJIS.map(e => `<button type="button" data-emoji="${e}" class="${e === p.icon ? 'active' : ''}">${e}</button>`).join('')}</div>` : ''}
+      <div class="person-nums">
+        <label>Alter (J)<input data-f="age" type="number" step="0.5" min="0" max="120" inputmode="decimal" value="${num(p.age)}"></label>
+        <label>Gewicht (kg)<input data-f="weight" type="number" step="0.5" min="1" max="300" inputmode="decimal" value="${num(p.weight)}"></label>
+        <label>Grösse (cm)<input data-f="height" type="number" step="1" min="30" max="250" inputmode="numeric" value="${num(p.height)}" placeholder="–"></label>
+      </div>
+      <label class="conf"><input type="checkbox" data-f="confirmed" ${p.confirmed ? 'checked' : ''}> Angaben ${p.confirmed ? 'bestätigt' : 'noch nicht bestätigt'}</label>
     </div>`).join('');
 }
 $('#peopleList').addEventListener('change', e => {
   const row = e.target.closest('[data-pid]');
   const f = e.target.dataset.f;
   if (!row || !f) return;
-  const v = f === 'confirmed' ? e.target.checked : f === 'label' ? e.target.value.trim() || 'Person' : Number(e.target.value);
+  const v = f === 'confirmed' ? e.target.checked
+    : f === 'label' ? e.target.value.trim() || 'Person'
+    : e.target.value === '' ? null : Number(e.target.value);
   store.updatePerson(row.dataset.pid, { [f]: v });
   renderPeople();
   toast('Gespeichert');
+});
+$('#peopleList').addEventListener('click', e => {
+  const row = e.target.closest('[data-pid]');
+  if (!row) return;
+  if (e.target.closest('[data-emoji-toggle]')) {
+    emojiOpenFor = emojiOpenFor === row.dataset.pid ? null : row.dataset.pid;
+    return renderPeople();
+  }
+  const pick = e.target.closest('[data-emoji]');
+  if (pick) {
+    store.updatePerson(row.dataset.pid, { icon: pick.dataset.emoji });
+    emojiOpenFor = null;
+    renderPeople();
+    toast('Gespeichert');
+  }
 });
 
 // ---------- Checkliste ----------

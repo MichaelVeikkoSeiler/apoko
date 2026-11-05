@@ -235,10 +235,10 @@ export function matchScore(item, symptom) {
 
 /** Voreinstellung (vom Nutzer genannt, noch nicht bestätigt). */
 export const DEFAULT_PEOPLE = [
-  { id: 'mann', label: 'Mann', icon: '👨', age: 45, weight: 90, confirmed: false },
-  { id: 'frau', label: 'Frau', icon: '👩', age: 45, weight: 60, confirmed: false },
-  { id: 'kind1', label: 'Kind 1', icon: '🧒', age: 7.5, weight: 25, confirmed: false },
-  { id: 'kind2', label: 'Kind 2', icon: '👧', age: 4.5, weight: 18, confirmed: false },
+  { id: 'mann', label: 'Mann', icon: '👨', age: 45, weight: 90, height: null, confirmed: false },
+  { id: 'frau', label: 'Frau', icon: '👩', age: 45, weight: 60, height: null, confirmed: false },
+  { id: 'kind1', label: 'Kind 1', icon: '🧒', age: 7.5, weight: 25, height: null, confirmed: false },
+  { id: 'kind2', label: 'Kind 2', icon: '👧', age: 4.5, weight: 18, height: null, confirmed: false },
 ];
 
 const sameName = (a, b) => norm(a).trim() === norm(b).trim();
