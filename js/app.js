@@ -20,7 +20,8 @@ const monthEnd = (y, m) => `${y}-${String(m).padStart(2, '0')}-${String(new Date
 /** Setzt ein Monatsfeld (type=month, ältere Browser: Textfeld MM/JJJJ). */
 function setMonth(el, iso) {
   if (!iso) { el.value = ''; return; }
-  el.value = el.type === 'month' ? iso.slice(0, 7) : fmtMonth(iso);
+  el.value = el.type === 'month' || el.type === 'hidden' ? iso.slice(0, 7) : fmtMonth(iso);
+  if (el === document.querySelector('#itemForm [name=expiry]')) syncPicker();
 }
 /** Liest ein Monatsfeld und liefert den Monatsletzten als JJJJ-MM-TT. */
 function readMonth(el) {
@@ -121,7 +122,7 @@ function itemCard(item, { readonly = false, tag = 'li' } = {}) {
       <div class="main">
         <h3>${esc(item.name)}${item.strength && !item.name.toLowerCase().includes(item.strength.toLowerCase()) ? ` <span class="muted">${esc(item.strength)}</span>` : ''}</h3>
         <div class="badges">
-          <span class="badge ${st.status}${st.recent ? ' recent' : ''}" title="${st.eff ? 'bis ' + fmtMonth(st.eff.date) : ''}">${describeDays(st.days)}</span>
+          ${st.status === 'unknown' ? '' : `<span class="badge ${st.status}${st.recent ? ' recent' : ''}" title="${st.eff ? 'bis ' + fmtMonth(st.eff.date) : ''}">${describeDays(st.days)}</span>`}
           ${item.rx ? `<span class="badge rx">℞${item.category ? ' ' + esc(item.category) : ''}</span>` : ''}
           ${!readonly && item.shared ? '<span class="badge shared">🔗</span>' : ''}
           ${!readonly && (item.location || item.person) ? `<span class="loc">${esc([item.location && '📍 ' + item.location, item.person && '👤 ' + item.person].filter(Boolean).join('  '))}</span>` : ''}
@@ -270,6 +271,48 @@ function fillDatalists() {
   $('#persons').innerHTML = names.map(v => `<option value="${esc(v)}">`).join('');
   renderLocationChips();
 }
+
+// ---------- Ablaufdatum: Monate links, Jahre rechts ----------
+const pick = { m: null, y: null };
+
+function pickerYears() {
+  const now = new Date().getFullYear();
+  const years = Array.from({ length: 6 }, (_, i) => now - 1 + i); // letztes Jahr bis 4 Jahre voraus
+  if (pick.y && !years.includes(pick.y)) years.push(pick.y);
+  return years.sort((a, b) => a - b);
+}
+
+function renderPicker() {
+  $('#mpMonths').innerHTML = Array.from({ length: 12 }, (_, i) => i + 1)
+    .map(m => `<button type="button" data-m="${m}" class="${pick.m === m ? 'active' : ''}">${m}</button>`).join('');
+  $('#mpYears').innerHTML = pickerYears()
+    .map(y => `<button type="button" data-y="${y}" class="${pick.y === y ? 'active' : ''}">${y}</button>`).join('');
+  $('#mpShow').textContent = pick.m || pick.y
+    ? `${pick.m ? String(pick.m).padStart(2, '0') : '––'}/${pick.y || '––––'}` : '';
+  $('#mpClear').hidden = !(pick.m || pick.y);
+}
+
+/** Auswahl aus dem (versteckten) Feld übernehmen. */
+function syncPicker() {
+  const m = /^(\d{4})-(\d{2})/.exec(F.expiry.value || '');
+  pick.y = m ? +m[1] : null;
+  pick.m = m ? +m[2] : null;
+  renderPicker();
+}
+
+function commitPicker() {
+  F.expiry.value = pick.m && pick.y ? `${pick.y}-${String(pick.m).padStart(2, '0')}` : '';
+  renderPicker();
+}
+
+$('.month-picker').addEventListener('click', e => {
+  const b = e.target.closest('[data-m], [data-y]');
+  if (!b) return;
+  if (b.dataset.m) pick.m = pick.m === +b.dataset.m ? null : +b.dataset.m;
+  if (b.dataset.y) pick.y = pick.y === +b.dataset.y ? null : +b.dataset.y;
+  commitPicker();
+});
+$('#mpClear').addEventListener('click', () => { pick.m = pick.y = null; commitPicker(); });
 
 // ---------- Standorte ----------
 const sameLoc = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
@@ -509,6 +552,7 @@ function openItem(item) {
     else el.value = v ?? '';
   }
   delete F.imageUrl.dataset.source;
+  syncPicker();
   renderGallery();
   fillDatalists();
   updateFormHint();
@@ -560,7 +604,7 @@ form.addEventListener('submit', async e => {
   e.preventDefault();
   if (!F.name.value.trim()) return flagField(F.name, 'Bitte einen Namen eingeben.');
   // Ablaufdatum ist optional; nur ein unvollständig eingetipptes Datum wird beanstandet
-  if (F.expiry.value.trim() && !readMonth(F.expiry)) return flagField(F.expiry, 'Ablaufdatum unvollständig: bitte Monat/Jahr wählen oder leer lassen.');
+  if (!F.expiry.value && (pick.m || pick.y)) { toast('Ablaufdatum unvollständig: bitte Monat und Jahr wählen oder leeren.'); return $('.month-picker').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   const item = readForm();
   const isNew = !item.id;
   item.id ||= store.uid();
@@ -1162,7 +1206,7 @@ function recRow(item, st, { linkedName = '', expired = false, note = '', blocked
   const thumb = item.imageUrl ? `<img class="thumb" src="${esc(item.imageUrl)}" alt="" referrerpolicy="no-referrer">`
     : keys[0] && !linkedName ? `<img class="thumb" data-photo="${esc(keys[0])}" alt="">`
     : `<span class="thumb">${FORM_ICON[item.form] || '📦'}</span>`;
-  const sub = [item.usage, linkedName ? '🏠 ' + linkedName : loc, st && !expired ? describeDays(st.days) : ''].filter(Boolean).join(' · ');
+  const sub = [item.usage, linkedName ? '🏠 ' + linkedName : loc, st && !expired && st.status !== 'unknown' ? describeDays(st.days) : ''].filter(Boolean).join(' · ');
   const openable = !linkedName && !expired && !blocked;
   return `<div class="rec${item.rx ? ' rx' : ''}${expired ? ' expired' : ''}${blocked ? ' blocked' : ''}" ${openable ? `data-open="${esc(item.id)}"` : ''}>
     ${thumb}<div class="txt"><strong>${esc(item.name)}</strong><small>${esc(sub)}</small>${note ? `<span class="note">⚠️ ${esc(note)}</span>` : ''}</div></div>`;
