@@ -559,7 +559,8 @@ function flagField(el, msg) {
 form.addEventListener('submit', async e => {
   e.preventDefault();
   if (!F.name.value.trim()) return flagField(F.name, 'Bitte einen Namen eingeben.');
-  if (!readMonth(F.expiry)) return flagField(F.expiry, 'Bitte das Ablaufdatum (Monat/Jahr) wählen.');
+  // Ablaufdatum ist optional; nur ein unvollständig eingetipptes Datum wird beanstandet
+  if (F.expiry.value.trim() && !readMonth(F.expiry)) return flagField(F.expiry, 'Ablaufdatum unvollständig: bitte Monat/Jahr wählen oder leer lassen.');
   const item = readForm();
   const isNew = !item.id;
   item.id ||= store.uid();
@@ -862,7 +863,7 @@ async function runResearch(bigs) {
     }
     if (!F.category.value && r.rezeptpflichtig !== 'unbekannt') { F.rx.checked = r.rezeptpflichtig === 'ja'; updateRxWarn(); }
     info.textContent = done.length
-      ? `✓ Recherche: ${done.join(', ')} ergänzt. Bitte kurz kontrollieren und das Ablaufdatum eingeben.`
+      ? `✓ Recherche: ${done.join(', ')} ergänzt. Bitte kurz kontrollieren.`
       : '✓ Recherche abgeschlossen, keine neuen Angaben gefunden.';
   } catch (err) {
     info.textContent = 'Recherche nicht möglich: ' + err.message;
