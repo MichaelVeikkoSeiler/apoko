@@ -116,12 +116,12 @@ function itemCard(item, { readonly = false, tag = 'li' } = {}) {
     : photoKeys(item)[0] ? `<img class="thumb" data-photo="${esc(photoKeys(item)[0])}" alt="">`
     : icon;
   return `
-    <${tag} class="item ${st.status}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
+    <${tag} class="item ${st.status}${st.recent ? ' recent' : ''}" ${readonly ? '' : `data-id="${esc(item.id)}" tabindex="0"`}>
       ${thumb}
       <div class="main">
         <h3>${esc(item.name)}${item.strength && !item.name.toLowerCase().includes(item.strength.toLowerCase()) ? ` <span class="muted">${esc(item.strength)}</span>` : ''}</h3>
         <div class="badges">
-          <span class="badge ${st.status}" title="${st.eff ? 'bis ' + fmtMonth(st.eff.date) : ''}">${describeDays(st.days)}</span>
+          <span class="badge ${st.status}${st.recent ? ' recent' : ''}" title="${st.eff ? 'bis ' + fmtMonth(st.eff.date) : ''}">${describeDays(st.days)}</span>
           ${item.rx ? `<span class="badge rx">℞${item.category ? ' ' + esc(item.category) : ''}</span>` : ''}
           ${!readonly && item.shared ? '<span class="badge shared">🔗</span>' : ''}
           ${!readonly && (item.location || item.person) ? `<span class="loc">${esc([item.location && '📍 ' + item.location, item.person && '👤 ' + item.person].filter(Boolean).join('  '))}</span>` : ''}
@@ -563,8 +563,13 @@ $('#btnDelete').addEventListener('click', () => {
   toast('Gelöscht');
 });
 // „+ Erfassen“ öffnet direkt die Kamera für den Strichcode; Schliessen führt ins Formular
-// „+ Erfassen“: zuerst Fotos der Packung (wichtigste Seite zuerst), dann „Abschliessen“
-$('#fab').addEventListener('click', () => openCapture('new'));
+// „+ Erfassen“: Schritt 1 Strichcode scannen (legt schon Infos ab), Schritt 2 automatisch die Fotos
+$('#fab').addEventListener('click', () => {
+  openItem(null);
+  openScanner(async code => { await applyScan(code); openCapture('add'); },
+    'Schritt 1: Strichcode scannen, am besten den quadratischen Code, sonst den langen Strichcode.',
+    { photoLabel: 'Kein Strichcode: weiter zu den Fotos →' });
+});
 
 async function applyScan(raw) {
   const r = parseBarcode(raw);
@@ -671,8 +676,9 @@ let capMode = 'new'; // 'new' = neuer Artikel, 'add' = Fotos zum offenen Artikel
 
 function capRender() {
   const n = capShots.length;
+  const known = F.name.value.trim();
   $('#capHint').innerHTML = n === 0
-    ? '<strong>1.</strong> Fotografiere zuerst die <strong>wichtigste Seite</strong> der Packung (Vorderseite mit dem Namen).'
+    ? `${known ? `✓ Erkannt: <strong>${esc(known)}</strong><br>` : ''}<strong>Schritt 2:</strong> Fotografiere die <strong>wichtigste Seite</strong> der Packung (Vorderseite mit dem Namen).`
     : `✓ ${n} Foto${n > 1 ? 's' : ''}. Fotografiere jetzt <strong>weitere relevante Seiten</strong>: Rückseite, Strichcode, Packungsinhalt (z. B. 100 ml). Dann <strong>Abschliessen</strong>.`;
   $('#capDone').disabled = n === 0;
   $('#capThumbs').innerHTML = capShots.map(s => `<img src="${s.url}" alt="">`).join('');
@@ -752,8 +758,8 @@ async function analyzeAll(shots) {
   const bigs = [];
   for (const b of shots) bigs.push(await photos.resizeImage(b, 1800, 0.9).catch(() => b));
   try {
-    // 1. Strichcode / DataMatrix in irgendeinem Foto
-    for (let i = 0; i < bigs.length; i++) {
+    // 1. Strichcode / DataMatrix in irgendeinem Foto (nicht nötig, wenn schon gescannt)
+    for (let i = 0; i < bigs.length && !F.gtin.value; i++) {
       info.textContent = `Suche Strichcode (${i + 1}/${bigs.length}) …`;
       const code = await decodeImage(bigs[i]).catch(() => null);
       if (code && parseBarcode(code).type !== 'text') { await applyScan(code); break; }
@@ -964,11 +970,13 @@ const scanDlg = $('#scanDialog');
 let stopScan = null;
 let scanHandler = null;
 
-async function openScanner(handler, hint) {
+async function openScanner(handler, hint, { photoLabel = '📷 Stattdessen Fotos aufnehmen' } = {}) {
   scanHandler = handler;
   $('#manualCode').value = '';
   $('#scanStatus').textContent = 'Kamera wird gestartet …';
-  $('#btnScanPhoto').hidden = handler !== applyScan;
+  // Beim Verbinden von Haushalten (QR) gibt es keinen Foto-Weg
+  $('#btnScanPhoto').hidden = handler === join;
+  $('#btnScanPhoto').textContent = photoLabel;
   scanDlg.showModal();
   // Nicht das Eingabefeld fokussieren, sonst öffnet sich die Tastatur und verdeckt die Kamera
   $('#btnScanClose').focus();
@@ -987,7 +995,7 @@ scanDlg.addEventListener('close', () => { stopScan?.(); stopScan = null; });
 $('#btnScanClose').addEventListener('click', closeScanner);
 $('#btnScanPhoto').addEventListener('click', () => {
   closeScanner();
-  $('#photoInput').click();
+  openCapture('add');
 });
 
 $('#btnManual').addEventListener('click', () => {

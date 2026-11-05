@@ -151,5 +151,21 @@ export async function startScanner(video, onResult) {
   await reader.decodeFromConstraints(constraints, video, result => {
     if (result) finish(result.getText());
   });
-  return () => { stopped = true; reader.reset(); };
+  // Rückfall: Der laufende ZXing-Scan übersieht manche Codes. Darum zusätzlich etwa jede
+  // Sekunde ein Einzelbild prüfen (inkl. Bildausschnitten, siehe decodeImage).
+  let busy = false;
+  const timer = setInterval(async () => {
+    if (stopped || done || busy || !video.videoWidth) return;
+    busy = true;
+    try {
+      const c = document.createElement('canvas');
+      c.width = video.videoWidth; c.height = video.videoHeight;
+      c.getContext('2d').drawImage(video, 0, 0);
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+      const text = blob && await decodeImage(blob);
+      if (text) finish(text);
+    } catch { /* nächster Versuch */ }
+    busy = false;
+  }, 1000);
+  return () => { stopped = true; clearInterval(timer); reader.reset(); };
 }
