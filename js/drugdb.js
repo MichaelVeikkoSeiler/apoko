@@ -122,10 +122,13 @@ async function productIndex() {
   }
   products = [...byName.values()].map(row => {
     const words = normText(row[0]).split(' ');
+    // Wirkstoffwörter im Namen (z. B. „Chlorhexidin“) sind keine Namensmerkmale
+    const subs = normText(row[1]).split(' ').filter(x => x.length >= 6);
+    const isSubstance = w => w.length >= 6 && subs.some(x => x.startsWith(w.slice(0, 6)));
     return {
       row,
       brand: words[0],
-      words: words.filter(w => w.length >= 4 && !STOP.has(w) && !/^\d/.test(w)),
+      words: words.filter(w => w.length >= 4 && !STOP.has(w) && !/^\d/.test(w) && !isSubstance(w)),
       numbers: words.filter(w => /^\d/.test(w)),
       substance: normText(row[1]).split(' ')[0] || '',
     };
@@ -154,23 +157,31 @@ export async function searchByText(text, limit = 6) {
   const idx = await productIndex();
   if (!idx) return [];
   const tokens = new Set(normText(text).split(' ').filter(t => t.length >= 3));
-  const long = [...tokens].filter(t => t.length >= 6);
-  const has = w => tokens.has(w) || (w.length >= 6 && long.some(t => lev1(t, w)));
+  const list = [...tokens];
+  // Namen unscharf vergleichen: Texterkennung liest z. B. „Merfe“ statt „Merfen“ (® stört)
+  // oder vertauscht einen Buchstaben.
+  const has = w => tokens.has(w)
+    || (w.length >= 5 && list.some(t => t.length >= 5 && lev1(t, w)))
+    || (w.length >= 5 && list.some(t => t.length >= 4 && w.startsWith(t) && w.length - t.length <= 2));
   // Wirkstoffe stehen in der Liste lateinisch (paracetamolum), aufgedruckt deutsch (Paracetamol)
-  const hasSubstance = sub => [...tokens].some(t => t.length >= 6 && t.length >= sub.length - 3 && sub.startsWith(t.slice(0, -1)));
-  const nums = new Set([...tokens].filter(t => /^\d/.test(t)).concat(
+  const hasSubstance = sub => list.some(t => t.length >= 6 && t.length >= sub.length - 3 && sub.startsWith(t.slice(0, -1)));
+  const nums = new Set(list.filter(t => /^\d/.test(t)).concat(
     (String(text).match(/\d+(?:[.,]\d+)?/g) || []).map(n => n.replace(',', '.'))));
 
   const scored = [];
   for (const p of idx) {
-    let score = 0;
-    if (p.brand.length >= 4 && !STOP.has(p.brand) && has(p.brand)) score += 10;
-    else if (p.substance.length >= 5 && hasSubstance(p.substance)) score += 4;
-    else continue;
-    for (const w of p.words) if (w !== p.brand && has(w)) score += 2;
+    let score = 0, nameHit = false;
+    if (p.brand.length >= 4 && !STOP.has(p.brand) && p.words.includes(p.brand) && has(p.brand)) { score += 10; nameHit = true; }
+    for (const w of p.words) if (w !== p.brand && w.length >= 5 && has(w)) { score += 3; nameHit = true; }
+    if (!nameHit) {
+      if (p.substance.length >= 5 && hasSubstance(p.substance)) score += 4;
+      else continue;
+    }
     for (const n of p.numbers) if (nums.has(n) || nums.has(n.replace(',', '.'))) score += 3;
-    scored.push({ score, p });
+    scored.push({ score, p, nameHit });
   }
+  // Passt ein Produktname, keine reinen Wirkstoff-Treffer mehr vorschlagen
+  if (scored.some(x => x.nameHit)) scored.splice(0, scored.length, ...scored.filter(x => x.nameHit));
   scored.sort((a, b) => b.score - a.score || a.p.row[0].length - b.p.row[0].length);
   return scored.slice(0, limit).map(({ p }) => rowToFields(p.row, { withQuantity: false }));
 }

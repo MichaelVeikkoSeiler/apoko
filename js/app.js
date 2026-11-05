@@ -395,6 +395,7 @@ function itemImageSources(item) {
   return list;
 }
 
+let scanNote = '';      // Hinweis zum gescannten Code (z. B. nicht in der Swissmedic-Liste)
 let gallery = [];        // { key?, blob?, url }
 let removedKeys = [];
 
@@ -462,6 +463,7 @@ function openItem(item) {
   $$('.field-invalid', form).forEach(el => el.classList.remove('field-invalid'));
   $('#scanInfo').hidden = true;
   $('#scanInfo').textContent = '';
+  scanNote = '';
   $('#suggestions').hidden = true;
   formTouched = !!item;
   gallery = photoKeys(item).map(key => ({ key, url: '' }));
@@ -603,7 +605,16 @@ async function applyScan(raw) {
         if (drug.usageDetail && drug.usageDetail !== drug.usage && !F.info.value) F.info.value = `• Anwendung laut Swissmedic: ${drug.usageDetail}`;
         info.push('Gefunden in der Swissmedic-Liste');
       } else {
-        info.push(`Swissmedic-Nr. ${sm.authNo}, nicht in der Liste gefunden: Name bitte eintippen`);
+        // Ältere Packungen (z. B. umbenannte Produkte) fehlen in der aktuellen Liste
+        scanNote = `Strichcode gelesen (Swissmedic-Nr. ${sm.authNo}), aber nicht in der aktuellen Swissmedic-Liste, vermutlich eine ältere Packung.`;
+        const prod = await lookupOpenProduct(r.gtin);
+        if (prod) {
+          fill({ name: prod.name, quantity: prod.quantity });
+          if (prod.unit) F.unit.value = prod.unit;
+          info.push(`Gefunden in ${prod.source}, bitte kontrollieren`);
+        } else {
+          info.push(scanNote + ' Der Name wird aus den Fotos gesucht.');
+        }
       }
     } else {
       $('#scanInfo').hidden = false;
@@ -828,6 +839,7 @@ const TABLET_NOTE = '<p>⚠️ Lose Tabletten ohne Aufdruck lassen sich nicht si
 
 function renderSuggestions(hits, text) {
   const info = $('#scanInfo');
+  const note = scanNote ? scanNote + ' ' : '';
   const box = $('#suggestions');
   box.hidden = false;
   if (!hits.length) {
@@ -841,7 +853,7 @@ function renderSuggestions(hits, text) {
       box.innerHTML = TABLET_NOTE;
       return;
     }
-    info.textContent = 'Kein Arzneimittel aus der Swissmedic-Liste. Gelesenen Text als Namen übernehmen?';
+    info.textContent = note + 'Kein passendes Arzneimittel aus der Swissmedic-Liste gefunden. Gelesenen Text als Namen übernehmen?';
     box.innerHTML = lines.map((l, i) => `<button type="button" class="suggestion" data-line="${i}"><strong>${esc(l)}</strong></button>`).join('')
       + '<p>Mehrere antippen, um sie zu kombinieren (z. B. Marke + Produkt).</p>';
     box.onclick = ev => {
@@ -855,7 +867,7 @@ function renderSuggestions(hits, text) {
     };
     return;
   }
-  info.textContent = `${hits.length === 1 ? '1 Vorschlag' : hits.length + ' Vorschläge'}: bitte den richtigen antippen und kontrollieren.`;
+  info.textContent = note + `${hits.length === 1 ? '1 Vorschlag' : hits.length + ' Vorschläge'} aus den Fotos: bitte den richtigen antippen und kontrollieren.`;
   box.innerHTML = hits.map((h, i) => `
     <button type="button" class="suggestion" data-i="${i}">
       <strong>${esc(h.name)}</strong>${h.rx ? '<span class="badge rx">℞</span>' : ''}
