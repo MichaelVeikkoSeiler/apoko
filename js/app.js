@@ -244,10 +244,6 @@ $('#itemList').addEventListener('click', e => {
   if (!li) return;
   // Ist eine Karte aufgeschoben, schliesst ein Tippen sie zuerst
   if (openCard) return closeOpenCard();
-  if (e.target.closest('img.thumb')) {
-    const it = store.getState().items.find(i => i.id === li.dataset.id);
-    return openViewer(itemImageSources(it), 0);
-  }
   openItem(store.getState().items.find(i => i.id === li.dataset.id));
 });
 $('#itemList').addEventListener('keydown', e => {
