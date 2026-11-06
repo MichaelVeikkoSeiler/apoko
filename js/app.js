@@ -135,6 +135,14 @@ function itemCard(item, { readonly = false, tag = 'li' } = {}) {
     </${tag}>`;
 }
 
+/** Kurzname für die Kachel: ohne Darreichungsform („, Filmtabletten“, „… Tabletten“). */
+const FORM_WORDS = /\s+(Film|Brause|Lutsch|Kau|Schmelz)?(tabletten|tablette|dragées|dragees|kapseln|kapsel|beutel|tropfen|sirup|salbe|creme|crème|gel|spray|pulver|zäpfchen|lösung|granulat|pastillen|ampullen)$/i;
+function shortName(name) {
+  let n = String(name || '').split(/,\s+/)[0].trim(); // „0,14 mg/ml“ bleibt ganz
+  for (let i = 0; i < 2 && FORM_WORDS.test(n) && n.replace(FORM_WORDS, '').trim().length >= 3; i++) n = n.replace(FORM_WORDS, '').trim();
+  return n || name;
+}
+
 /** Kachel für den Vorrat: nur Bild und Name, Ablaufstatus als kleiner Punkt. */
 function itemTile(item) {
   const st = store.expiryStatus(item);
@@ -148,7 +156,7 @@ function itemTile(item) {
     : st.status === 'soon' ? '<span class="dot dot-warn" title="Läuft bald ab"></span>' : '';
   return `<div class="item tile ${st.status}${st.recent ? ' recent' : ''}" data-id="${esc(item.id)}" tabindex="0">
       ${img}${dot}
-      <h3>${esc(item.name)}</h3>
+      <h3>${esc(shortName(item.name))}</h3>
     </div>`;
 }
 
