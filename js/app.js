@@ -135,6 +135,23 @@ function itemCard(item, { readonly = false, tag = 'li' } = {}) {
     </${tag}>`;
 }
 
+/** Kachel für den Vorrat: nur Bild und Name, Ablaufstatus als kleiner Punkt. */
+function itemTile(item) {
+  const st = store.expiryStatus(item);
+  const form = formById(item.form);
+  const key = photoKeys(item)[0];
+  const img = item.imageUrl ? `<img class="tile-img" src="${esc(item.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+    : key ? `<img class="tile-img" data-photo="${esc(key)}" alt="">`
+    : `<span class="tile-img ph" aria-hidden="true">${FORM_ICON[form.id] || '📦'}</span>`;
+  // Punkt: rot = abgelaufen, orange = seit höchstens 12 Monaten abgelaufen oder läuft bald ab
+  const dot = st.status === 'expired' ? `<span class="dot ${st.recent ? 'dot-warn' : 'dot-bad'}" title="Abgelaufen"></span>`
+    : st.status === 'soon' ? '<span class="dot dot-warn" title="Läuft bald ab"></span>' : '';
+  return `<div class="item tile ${st.status}${st.recent ? ' recent' : ''}" data-id="${esc(item.id)}" tabindex="0">
+      ${img}${dot}
+      <h3>${esc(item.name)}</h3>
+    </div>`;
+}
+
 function renderInventory() {
   const { items, household } = store.getState();
   $('#householdLabel').textContent = household.name;
@@ -156,22 +173,21 @@ function renderInventory() {
   $('#alerts').innerHTML = counts.expired
     ? `<div class="alert danger"><strong>${counts.expired} Artikel abgelaufen.</strong> ${esc(NOTES.disposal)}</div>` : '';
 
-  const order = { expired: 0, soon: 1, ok: 2, unknown: 3 };
   const list = withStatus
     .filter(x => passFilter(x.i, x.st) && passLocation(x.i) && matches(x.i, query))
-    .sort((a, b) => order[a.st.status] - order[b.st.status] || (a.st.days ?? 1e9) - (b.st.days ?? 1e9) || a.i.name.localeCompare(b.i.name));
+    .sort((a, b) => a.i.name.localeCompare(b.i.name, 'de', { sensitivity: 'base' })); // alphabetisch
 
   // Jede Zeile: roter Löschen-Knopf hinten, Karte darüber (nach links wischen zeigt den Knopf)
   $('#itemList').innerHTML = list.map(x => `<li class="swipe-row">
       <button type="button" class="swipe-del" data-del="${esc(x.i.id)}" tabindex="-1">🗑️<span>Löschen</span></button>
-      ${itemCard(x.i, { tag: 'div' })}
+      ${itemTile(x.i)}
     </li>`).join('') ||
     (items.length ? '<p class="muted" style="text-align:center">Keine Treffer für diesen Filter.</p>' : '');
   $('#emptyState').hidden = items.length > 0;
   $$('#itemList img[data-photo]').forEach(async img => {
     const url = await photos.photoUrl(img.dataset.photo);
     if (url) img.src = url;
-    else img.replaceWith(Object.assign(document.createElement('span'), { className: 'thumb ph', textContent: '📦' }));
+    else img.replaceWith(Object.assign(document.createElement('span'), { className: 'tile-img ph', textContent: '📦' }));
   });
   $$('#filters .chip').forEach(c => c.classList.toggle('active', c.dataset.filter === filter));
 }
