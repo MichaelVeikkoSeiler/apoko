@@ -31,6 +31,7 @@
         <select id="locationFilter" aria-label="Standort"><option value="">Alle Standorte</option></select>
       </div>
       <div class="chips" id="filters" role="tablist">
+        <button class="chip" id="btnGroup" type="button" aria-pressed="true">🗂️ Nach Zweck</button>
         <button class="chip active" data-filter="all">Alle</button>
         <button class="chip" data-filter="soon">Läuft bald ab</button>
         <button class="chip" data-filter="expired">Abgelaufen</button>
@@ -231,6 +232,9 @@
             <select name="productType" id="productTypeSelect"></select>
           </label>
         </div>
+        <label>Zweck (Gruppe im Vorrat)
+          <select name="purpose" id="purposeSelect"></select>
+        </label>
         <label>Anwendung (allgemein)
           <textarea name="usage" rows="2" placeholder="Wird automatisch ergänzt, z. B. „Gegen Schmerzen und Fieber“"></textarea>
         </label>

@@ -1,5 +1,5 @@
 import { parseBarcode, swissmedicInfo, normalizeGtin } from './gs1.js';
-import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, FORM_USES, PRODUCT_TYPES, looksFrench, formById } from './knowledge.js';
+import { FORMS, UNITS, CATEGORIES, CHECKLIST, NOTES, FORM_USES, PRODUCT_TYPES, PURPOSES, purposeById, guessPurpose, looksFrench, formById } from './knowledge.js';
 import * as store from './store.js';
 import { startScanner, decodeImage, startCamera } from './scanner.js';
 import { lookupSwissDrug, searchByText, searchByName, guessForm } from './drugdb.js';
@@ -186,10 +186,21 @@ function renderInventory() {
     .sort((a, b) => a.i.name.localeCompare(b.i.name, 'de', { sensitivity: 'base' })); // alphabetisch
 
   // Jede Zeile: roter Löschen-Knopf hinten, Karte darüber (nach links wischen zeigt den Knopf)
-  $('#itemList').innerHTML = list.map(x => `<li class="swipe-row">
+  const row = x => `<li class="swipe-row">
       <button type="button" class="swipe-del" data-del="${esc(x.i.id)}" tabindex="-1">🗑️<span>Löschen</span></button>
       ${itemTile(x.i)}
-    </li>`).join('') ||
+    </li>`;
+  let html;
+  if (groupByPurpose) {
+    // Gruppen in fester Reihenfolge, innerhalb alphabetisch
+    const groups = new Map(PURPOSES.map(p => [p.id, []]));
+    list.forEach(x => groups.get(purposeById(guessPurpose(x.i)).id).push(x));
+    html = [...groups].filter(([, xs]) => xs.length).map(([id, xs]) => {
+      const p = purposeById(id);
+      return `<li class="group-head"><span>${p.icon}</span> ${esc(p.label)} <small>${xs.length}</small></li>` + xs.map(row).join('');
+    }).join('');
+  } else html = list.map(row).join('');
+  $('#itemList').innerHTML = html ||
     (items.length ? '<p class="muted" style="text-align:center">Keine Treffer für diesen Filter.</p>' : '');
   $('#emptyState').hidden = items.length > 0;
   $$('#itemList img[data-photo]').forEach(async img => {
@@ -197,10 +208,20 @@ function renderInventory() {
     if (url) img.src = url;
     else img.replaceWith(Object.assign(document.createElement('span'), { className: 'tile-img ph', textContent: '📦' }));
   });
-  $$('#filters .chip').forEach(c => c.classList.toggle('active', c.dataset.filter === filter));
+  $$('#filters .chip[data-filter]').forEach(c => c.classList.toggle('active', c.dataset.filter === filter));
 }
 
 function setFilter(f) { filter = f; renderInventory(); }
+let groupByPurpose = (() => { try { return localStorage.getItem('apoko.group') !== 'off'; } catch { return true; } })();
+const syncGroupBtn = () => { $('#btnGroup').classList.toggle('active', groupByPurpose); $('#btnGroup').setAttribute('aria-pressed', groupByPurpose); };
+syncGroupBtn();
+$('#btnGroup').addEventListener('click', e => {
+  e.stopPropagation();
+  groupByPurpose = !groupByPurpose;
+  try { localStorage.setItem('apoko.group', groupByPurpose ? 'on' : 'off'); } catch { /* egal */ }
+  syncGroupBtn();
+  renderInventory();
+});
 $('#filters').addEventListener('click', e => { const b = e.target.closest('[data-filter]'); if (b) setFilter(b.dataset.filter); });
 $('#stats').addEventListener('click', e => { const b = e.target.closest('[data-filter]'); if (b) { showView('inventory'); setFilter(b.dataset.filter); } });
 $('#search').addEventListener('input', e => { query = e.target.value.trim(); renderInventory(); });
@@ -281,6 +302,8 @@ const F = form.elements;
 
 $('#formSelect').innerHTML = FORMS.map(f => `<option value="${f.id}">${esc(f.label)}</option>`).join('');
 $('#unitSelect').innerHTML = UNITS.map(u => `<option>${u}</option>`).join('');
+$('#purposeSelect').innerHTML = '<option value="">automatisch</option>'
+  + PURPOSES.map(p => `<option value="${p.id}">${p.icon} ${esc(p.label)}</option>`).join('');
 $('#productTypeSelect').innerHTML = PRODUCT_TYPES.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('');
 $('#categorySelect').innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${esc(c.label)}</option>`).join('');
 
@@ -610,6 +633,7 @@ function readForm() {
     atc: F.atc.value.trim(),
     manufacturer: F.manufacturer.value.trim(),
     productType: F.productType.value,
+    purpose: F.purpose.value,
     info: F.info.value.trim(),
     strength: F.strength.value.trim(),
     form: F.form.value,
