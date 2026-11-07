@@ -469,3 +469,60 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 #itemList .group-head { grid-column: 1 / -1; list-style: none; margin: 10px 2px 0; font-weight: 700; font-size: .95rem; display: flex; align-items: center; gap: 6px; }
 #itemList .group-head:first-child { margin-top: 0; }
 #itemList .group-head small { color: var(--muted); font-weight: 500; }
+
+/* ================= Stil „Nacht“: dunkel mit Mint/Blau-Akzenten ================= */
+@font-face {
+  font-family: 'Space Grotesk'; font-style: normal; font-weight: 300 700; font-display: swap;
+  src: url(../fonts/SpaceGrotesk-latin.woff2) format('woff2');
+}
+:root, :root:not([data-x]) {
+  --bg: #0b0f1e; --surface: #141a30; --text: #eef1ff; --muted: #8e97c2; --border: #262f55;
+  --primary: #7cf5c8; --primary-ink: #06231a; --primary-soft: #14352c;
+  --accent: #8ab4ff; --accent-2: #d58bff;
+  --grad: linear-gradient(90deg, #7cf5c8, #8ab4ff);
+  --danger: #ff6b81; --danger-soft: #3a1622; --warn: #ffbe5c; --warn-soft: #3a2b10;
+  --ok: #6fe3a4; --ok-soft: #12302a; --rx: #c3a6ff; --rx-soft: #2a2150;
+  --st-ok: #22c55e; --st-warn: #ffa31a; --st-bad: #ff4d6d; --st-none: #4b5580;
+  --shadow: 0 10px 30px rgb(0 0 0 / .35);
+  color-scheme: dark;
+}
+body {
+  font-family: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: radial-gradient(circle at 15% -10%, #2b1f6b 0, transparent 45%),
+              radial-gradient(circle at 110% 35%, #0f4d4a 0, transparent 40%), var(--bg);
+  background-attachment: fixed; color: var(--text);
+}
+.topbar { background: rgb(11 15 30 / .65); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+.topbar h1 { font-size: 1.55rem; background: linear-gradient(90deg, #7cf5c8, #8ab4ff, #d58bff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+input, select, textarea { background: var(--surface); border-color: #2c3560; color: var(--text); border-radius: 14px; }
+.chip { background: var(--surface); border-color: #2c3560; color: var(--text); }
+.chip.active, .chip.loc.active, .chip.sym.active { background: var(--grad); color: #06142a; border-color: transparent; box-shadow: 0 0 18px rgb(124 245 200 / .35); }
+.btn { background: var(--surface); border-color: #2c3560; color: var(--text); }
+.btn.primary { background: var(--grad); color: #06142a; border-color: transparent; }
+.card { background: rgb(20 26 48 / .85); border-color: var(--border); }
+.fab { background: var(--grad); color: #06142a; box-shadow: 0 0 28px rgb(124 245 200 / .45); }
+.tabbar { background: rgb(11 15 30 / .88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--border); }
+.tab { color: var(--muted); }
+.tab span { filter: none; opacity: 1; }
+.tab.active { color: var(--primary); text-shadow: 0 0 12px rgb(124 245 200 / .55); }
+.item.tile { background: rgb(20 26 48 / .9); border: 1px solid var(--border); border-left: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); }
+.item.tile h3 { color: var(--text); font-weight: 600; font-size: .84rem; }
+.item.tile .dot { border-color: var(--bg); }
+.item.tile .dot-bad { box-shadow: 0 0 10px #ff4d6d; }
+.item.tile .dot-warn { box-shadow: 0 0 10px #ffa31a; }
+.badge.ok, .badge.soon, .badge.expired { color: #0b0f1e; }
+dialog { background: var(--bg); }
+.sheet-head, .sheet-foot { background: var(--surface); border-color: var(--border); }
+
+/* Kategorien: aufklappbar */
+#itemList .group-head { cursor: pointer; user-select: none; -webkit-user-select: none; margin: 4px 0 0; padding: 12px 14px; border-radius: 14px;
+  background: rgb(20 26 48 / .7); border: 1px solid var(--border); text-transform: uppercase; letter-spacing: 1.2px; font-size: .8rem; color: var(--accent); }
+#itemList .group-head small { color: var(--primary); font-weight: 600; letter-spacing: 0; }
+#itemList .group-head .chev { margin-left: auto; color: var(--muted); transition: transform .2s; font-size: 1rem; }
+#itemList .group-head.open .chev { transform: rotate(90deg); }
+#itemList .group-head .gdots { display: inline-flex; gap: 4px; margin-left: 6px; }
+#itemList .group-head .gdots i { width: 8px; height: 8px; border-radius: 50%; }
+#itemList .group-head .gdots .b { background: var(--st-bad); box-shadow: 0 0 8px var(--st-bad); }
+#itemList .group-head .gdots .w { background: var(--st-warn); box-shadow: 0 0 8px var(--st-warn); }
+.beilage { display: inline-block; margin: -4px 0 12px; color: var(--accent); font-size: .9rem; }
+.btn.primary:disabled { background: #1d2545; color: var(--muted); box-shadow: none; opacity: 1; }

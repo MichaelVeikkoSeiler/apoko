@@ -195,9 +195,16 @@ function renderInventory() {
     // Gruppen in fester Reihenfolge, innerhalb alphabetisch
     const groups = new Map(PURPOSES.map(p => [p.id, []]));
     list.forEach(x => groups.get(purposeById(guessPurpose(x.i)).id).push(x));
+    // Zugeklappt, ausser selbst geöffnet oder beim Suchen/Filtern
+    const allOpen = !!query || filter !== 'all';
     html = [...groups].filter(([, xs]) => xs.length).map(([id, xs]) => {
-      const p = purposeById(id);
-      return `<li class="group-head"><span>${p.icon}</span> ${esc(p.label)} <small>${xs.length}</small></li>` + xs.map(row).join('');
+      const p = purposeById(id), open = allOpen || openGroups.has(id);
+      const nBad = xs.filter(x => x.st.status === 'expired' && !x.st.recent).length;
+      const nWarn = xs.filter(x => x.st.status === 'soon' || (x.st.status === 'expired' && x.st.recent)).length;
+      const dots = (nBad ? '<i class="b"></i>' : '') + (nWarn ? '<i class="w"></i>' : '');
+      return `<li class="group-head${open ? ' open' : ''}" data-group="${id}" role="button" tabindex="0" aria-expanded="${open}">`
+        + `<span>${p.icon}</span> ${esc(p.label)} <small>${xs.length}</small>${dots ? `<span class="gdots">${dots}</span>` : ''}<span class="chev">›</span></li>`
+        + (open ? xs.map(row).join('') : '');
     }).join('');
   } else html = list.map(row).join('');
   $('#itemList').innerHTML = html ||
@@ -212,6 +219,16 @@ function renderInventory() {
 }
 
 function setFilter(f) { filter = f; renderInventory(); }
+// Geöffnete Kategorien (Standard: alle zu)
+const openGroups = new Set((() => { try { return JSON.parse(localStorage.getItem('apoko.openGroups') || '[]'); } catch { return []; } })());
+$('#itemList').addEventListener('click', e => {
+  const h = e.target.closest('.group-head[data-group]');
+  if (!h) return;
+  const id = h.dataset.group;
+  if (openGroups.has(id)) openGroups.delete(id); else openGroups.add(id);
+  try { localStorage.setItem('apoko.openGroups', JSON.stringify([...openGroups])); } catch { /* egal */ }
+  renderInventory();
+});
 let groupByPurpose = (() => { try { return localStorage.getItem('apoko.group') !== 'off'; } catch { return true; } })();
 const syncGroupBtn = () => { $('#btnGroup').classList.toggle('active', groupByPurpose); $('#btnGroup').setAttribute('aria-pressed', groupByPurpose); };
 syncGroupBtn();
@@ -612,6 +629,7 @@ function openItem(item) {
     else el.value = v ?? '';
   }
   delete F.imageUrl.dataset.source;
+  updateBeilage();
   pickFolded = !!F.expiry.value;
   syncPicker();
   renderGallery();
@@ -622,6 +640,14 @@ function openItem(item) {
   $('.sheet-body', dlg).scrollTop = 0; // immer zuoberst beginnen
   if (isNew) $('#btnScan').focus();
 }
+
+/** Link zur Packungsbeilage: Suche auf compendium.ch nach dem Produktnamen. */
+function updateBeilage() {
+  const n = shortName(F.name.value.trim());
+  $('#beilageLink').hidden = !n;
+  if (n) $('#beilageLink').href = 'https://www.google.com/search?q=' + encodeURIComponent(`${n} Patienteninformation site:compendium.ch`);
+}
+F.name.addEventListener('change', updateBeilage);
 
 function readForm() {
   const num = v => v === '' ? null : Number(v);

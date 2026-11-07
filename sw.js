@@ -1,9 +1,10 @@
 // Service Worker: macht Apoko offline verfügbar.
-const CACHE = 'apoko-v47';
+const CACHE = 'apoko-v48';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/app.js', 'js/gs1.js', 'js/knowledge.js', 'js/store.js', 'js/share.js', 'js/scanner.js', 'js/drugdb.js', 'js/photos.js', 'js/ocr.js', 'js/productdb.js', 'js/advice.js', 'js/research.js',
   'vendor/qrcode.js', 'vendor/zxing.min.js',
+  'fonts/SpaceGrotesk-latin.woff2',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 
