@@ -277,3 +277,62 @@ export function typeFromCode(code) {
   if (/synth|chem|antidot/.test(c)) return 'chemisch';
   return '';
 }
+
+/**
+ * Gruppen nach Zweck für den Vorrat. Reihenfolge = Anzeigereihenfolge.
+ * keys: Wortanfänge in Name/Anwendung/Produktinfo, atc: ATC-Präfixe.
+ */
+export const PURPOSES = [
+  { id: 'schmerz', label: 'Schmerzen & Fieber', icon: '🤕', atc: ['N02', 'M01A'],
+    keys: ['schmerz', 'fieber', 'kopfweh', 'migräne', 'paracetamol', 'ibuprofen', 'acetylsalicyl', 'aspirin', 'dafalgan', 'algifor', 'panadol', 'entzündung'] },
+  { id: 'erkaeltung', label: 'Erkältung & Atemwege', icon: '🤧', atc: ['R01', 'R02', 'R05', 'R07'],
+    keys: ['erkält', 'grippe', 'husten', 'schnupfen', 'nase', 'hals', 'schleim', 'bronch', 'atemweg', 'nasenspray', 'sinus', 'inhal'] },
+  { id: 'allergie', label: 'Allergie', icon: '🌼', atc: ['R06'],
+    keys: ['allergi', 'heuschnupfen', 'antihistamin', 'pollen'] },
+  { id: 'magen', label: 'Magen & Darm', icon: '🫄', atc: ['A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A09', 'A16AX'],
+    keys: ['magen', 'darm', 'verdauung', 'durchfall', 'übelkeit', 'erbrechen', 'verstopfung', 'sodbrennen', 'bläh', 'bauch', 'krampf', 'reizdarm'] },
+  { id: 'haut', label: 'Haut & Wunden', icon: '🩹', atc: ['D'],
+    keys: ['haut', 'wunde', 'wund', 'pflaster', 'desinf', 'sonnenbrand', 'verbrenn', 'insekt', 'stich', 'juck', 'narbe', 'ekzem', 'schürf', 'verband'] },
+  { id: 'muskeln', label: 'Muskeln & Gelenke', icon: '💪', atc: ['M02', 'M03', 'M04', 'M05', 'M09'],
+    keys: ['muskel', 'gelenk', 'sport', 'prell', 'verstauch', 'zerrung', 'rücken', 'arnika', 'arnica', 'massage', 'rheuma'] },
+  { id: 'augen', label: 'Augen & Ohren', icon: '👁️', atc: ['S'],
+    keys: ['auge', 'augen', 'ohr', 'ohren', 'bindehaut', 'tränen'] },
+  { id: 'vitamine', label: 'Vitamine & Ergänzung', icon: '🍊', atc: ['A11', 'A12', 'A13'],
+    keys: ['vitamin', 'mineral', 'magnesium', 'zink', 'eisen', 'calcium', 'kalzium', 'nahrungsergänzung', 'multivitamin', 'omega'] },
+  { id: 'schlaf', label: 'Schlaf & Beruhigung', icon: '😴', atc: ['N05', 'N06'],
+    keys: ['schlaf', 'beruhig', 'nervosität', 'unruhe', 'stress', 'baldrian', 'melisse'] },
+  { id: 'herz', label: 'Herz & Kreislauf', icon: '❤️', atc: ['C', 'B01'],
+    keys: ['herz', 'kreislauf', 'blutdruck', 'venen', 'blutverdünn'] },
+  { id: 'sonst', label: 'Sonstiges', icon: '📦', atc: [], keys: [] },
+];
+
+export const purposeById = id => PURPOSES.find(p => p.id === id) || PURPOSES[PURPOSES.length - 1];
+
+function purposeFromText(text) {
+  const t = ' ' + String(text || '').toLowerCase().replace(/[^a-zäöüéèàç]+/g, ' ');
+  // spezifische Gruppen vor „Schmerzen“ (z. B. Halsschmerzen → Erkältung, Bauchkrämpfe → Magen)
+  const order = ['erkaeltung', 'allergie', 'magen', 'augen', 'muskeln', 'haut', 'vitamine', 'schlaf', 'herz', 'schmerz'];
+  for (const id of order) {
+    const p = purposeById(id);
+    if (p.keys.some(k => t.includes(' ' + k) || (k.length >= 6 && t.includes(k)))) return id;
+  }
+  return '';
+}
+
+/** Zweck eines Artikels: eigene Wahl, sonst aus Anwendung/Name, ATC-Code, Produktinfo, Form. */
+export function guessPurpose(item) {
+  if (item.purpose) return item.purpose;
+  const fromMain = purposeFromText(`${item.usage || ''} ${item.name || ''}`);
+  if (fromMain) return fromMain;
+  const atc = String(item.atc || '').toUpperCase();
+  if (atc) {
+    let best = null, len = 0;
+    for (const p of PURPOSES) for (const a of p.atc) if (atc.startsWith(a) && a.length > len) { best = p.id; len = a.length; }
+    if (best) return best;
+  }
+  const fromInfo = purposeFromText(item.info);
+  if (fromInfo) return fromInfo;
+  if (item.form === 'pflaster' || item.form === 'verband') return 'haut';
+  if (item.form === 'augentropfen') return 'augen';
+  return 'sonst';
+}

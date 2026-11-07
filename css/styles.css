@@ -464,3 +464,8 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .item.tile h3 { margin: 6px 8px 8px; font-size: .8rem; }
 .item.tile .tile-img.ph { font-size: 2rem; }
 .item.tile .dot { top: 6px; right: 6px; width: 12px; height: 12px; }
+
+/* Gruppen nach Zweck */
+#itemList .group-head { grid-column: 1 / -1; list-style: none; margin: 10px 2px 0; font-weight: 700; font-size: .95rem; display: flex; align-items: center; gap: 6px; }
+#itemList .group-head:first-child { margin-top: 0; }
+#itemList .group-head small { color: var(--muted); font-weight: 500; }
