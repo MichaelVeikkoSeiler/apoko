@@ -526,3 +526,6 @@ dialog { background: var(--bg); }
 #itemList .group-head .gdots .w { background: var(--st-warn); box-shadow: 0 0 8px var(--st-warn); }
 .beilage { display: inline-block; margin: -4px 0 12px; color: var(--accent); font-size: .9rem; }
 .btn.primary:disabled { background: #1d2545; color: var(--muted); box-shadow: none; opacity: 1; }
+/* Ecken wie Eingabefelder und Rahmen, keine Pillenform */
+.chip, .chip.loc, .chip.sym, .fab, .btn { border-radius: 12px; }
+.badge, .gbadge { border-radius: 6px; }

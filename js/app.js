@@ -125,7 +125,7 @@ function itemCard(item, { readonly = false, tag = 'li' } = {}) {
           ${st.status === 'unknown' ? '' : `<span class="badge ${st.status}${st.recent ? ' recent' : ''}" title="${st.eff ? 'bis ' + fmtMonth(st.eff.date) : ''}">${describeDays(st.days)}</span>`}
           ${item.rx ? `<span class="badge rx">℞${item.category ? ' ' + esc(item.category) : ''}</span>` : ''}
           ${!readonly && item.shared ? '<span class="badge shared">🔗</span>' : ''}
-          ${!readonly && (item.location || item.person) ? `<span class="loc">${esc([item.location && '📍 ' + item.location, item.person && '👤 ' + item.person].filter(Boolean).join('  '))}</span>` : ''}
+          ${!readonly && (item.location || item.person) ? `<span class="loc">${esc([item.location && item.location, item.person && '👤 ' + item.person].filter(Boolean).join('  '))}</span>` : ''}
         </div>
       </div>
       <div class="right">
@@ -393,7 +393,7 @@ const sameLoc = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().to
 function renderLocationChips() {
   const current = F.location.value;
   $('#locationChips').innerHTML = store.getState().locations
-    .map(l => `<button type="button" class="chip loc${sameLoc(l, current) ? ' active' : ''}" data-loc="${esc(l)}">📍 ${esc(l)}</button>`)
+    .map(l => `<button type="button" class="chip loc${sameLoc(l, current) ? ' active' : ''}" data-loc="${esc(l)}">${esc(l)}</button>`)
     .join('');
 }
 $('#locationChips').addEventListener('click', e => {
@@ -426,7 +426,7 @@ function renderLocationSettings() {
   $('#locationList').innerHTML = locations.length
     ? locations.map(l => {
       const n = items.filter(i => sameLoc(i.location, l)).length;
-      return `<li><span class="locname">📍 ${esc(l)}</span><span class="count">${n} Artikel</span>
+      return `<li><span class="locname">${esc(l)}</span><span class="count">${n} Artikel</span>
         <button class="btn ghost" data-rename="${esc(l)}">Umbenennen</button>
         <button class="btn ghost" data-remove-loc="${esc(l)}" aria-label="${esc(l)} löschen">✕</button></li>`;
     }).join('')
@@ -1411,7 +1411,7 @@ function renderSymptomChips(detected = []) {
 }
 
 function recRow(item, st, { linkedName = '', expired = false, note = '', blocked = false } = {}) {
-  const loc = [item.location && '📍 ' + item.location, item.person && '👤 für ' + item.person].filter(Boolean).join('  ');
+  const loc = [item.location, item.person && '👤 für ' + item.person].filter(Boolean).join('  ');
   const keys = photoKeys(item);
   const thumb = item.imageUrl ? `<img class="thumb" src="${esc(item.imageUrl)}" alt="" referrerpolicy="no-referrer">`
     : keys[0] && !linkedName ? `<img class="thumb" data-photo="${esc(keys[0])}" alt="">`
