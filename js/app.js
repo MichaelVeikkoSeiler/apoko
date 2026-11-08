@@ -9,6 +9,7 @@ import { recognizeText } from './ocr.js';
 import { researchProduct, getApiKey, setApiKey } from './research.js';
 import { SYMPTOMS, EMERGENCY, detectSymptoms, adviseFor } from './advice.js';
 import { buildShareCode, shareLink, parseShareCode, sharedItems } from './share.js';
+import { klickHoeren, klickAn, klickSetzen, tock } from './klick.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -1640,6 +1641,10 @@ function renderChecklist() {
 
 // ---------- Einstellungen ----------
 $('#householdName').value = store.getState().household.name;
+// Klickton wie in Taktland, in den Einstellungen abschaltbar
+klickHoeren();
+$('#klickToggle').checked = klickAn();
+$('#klickToggle').addEventListener('change', e => { klickSetzen(e.target.checked); if (e.target.checked) tock(); });
 $('#householdName').addEventListener('change', e => { store.setHouseholdName(e.target.value); toast('Name gespeichert'); });
 $('#btnExport').addEventListener('click', async () => {
   const data = JSON.parse(store.exportBackup());
