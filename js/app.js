@@ -164,6 +164,7 @@ function itemTile(item) {
 function renderInventory() {
   const { items, household } = store.getState();
   $('#householdLabel').textContent = household.name;
+  $('#itemCount').innerHTML = `<b>${items.length}</b><span>${items.length === 1 ? 'Produkt' : 'Produkte'}</span>`;
   renderLocationFilter();
 
   const withStatus = items.map(i => ({ i, st: store.expiryStatus(i) }));
