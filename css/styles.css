@@ -529,3 +529,7 @@ dialog { background: var(--bg); }
 /* Ecken wie Eingabefelder und Rahmen, keine Pillenform */
 .chip, .chip.loc, .chip.sym, .fab, .btn { border-radius: 12px; }
 .badge, .gbadge { border-radius: 6px; }
+/* Anzahl Produkte rechts im Kopf */
+.hcount { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.hcount b { font-size: 1.55rem; font-weight: 700; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hcount span { font-size: .78rem; color: var(--muted); }
