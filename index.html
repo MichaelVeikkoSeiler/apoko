@@ -164,6 +164,12 @@
           <button id="btnSaveKey" class="btn">Speichern</button>
         </div>
         <p id="apiKeyState" class="small"></p>
+        <div id="minAgeBulk" hidden>
+          <h3>Mindestalter nachtragen</h3>
+          <p class="muted small" id="minAgeBulkText"></p>
+          <button type="button" id="btnMinAgeAll" class="btn">🔎 Für alle Artikel ohne Angabe ermitteln</button>
+          <p id="minAgeBulkStatus" class="small"></p>
+        </div>
       </div>
       <div class="card">
         <h2>Datensicherung</h2>
@@ -237,6 +243,13 @@
             <select name="productType" id="productTypeSelect"></select>
           </label>
         </div>
+        <div class="minage-row">
+          <label>Zugelassen ab (Jahre)
+            <input name="minAge" type="number" inputmode="decimal" min="0" max="18" step="0.5" placeholder="unbekannt">
+          </label>
+          <button type="button" id="btnMinAge" class="btn" hidden>🔎 Mit Claude prüfen</button>
+        </div>
+        <p id="minAgeInfo" class="muted small" hidden></p>
         <label>Zweck (Gruppe im Vorrat)
           <select name="purpose" id="purposeSelect"></select>
         </label>

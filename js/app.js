@@ -6,7 +6,7 @@ import { lookupSwissDrug, searchByText, searchByName, guessForm } from './drugdb
 import { lookupOpenProduct } from './productdb.js';
 import * as photos from './photos.js';
 import { recognizeText } from './ocr.js';
-import { researchProduct, getApiKey, setApiKey } from './research.js';
+import { researchProduct, researchMinAge, getApiKey, setApiKey } from './research.js';
 import { SYMPTOMS, EMERGENCY, detectSymptoms, adviseFor } from './advice.js';
 import { buildShareCode, shareLink, parseShareCode, sharedItems } from './share.js';
 
@@ -56,7 +56,7 @@ function showView(name) {
   if (name === 'linked') renderLinked();
   if (name === 'check') renderChecklist();
   if (name === 'help') renderHelp();
-  if (name === 'settings') { renderLocationSettings(); renderPeople(); }
+  if (name === 'settings') { renderLocationSettings(); renderPeople(); renderMinAgeBulk(); }
   window.scrollTo(0, 0);
 }
 $$('.tab').forEach(t => t.addEventListener('click', () => showView(t.dataset.view)));
@@ -631,6 +631,8 @@ function openItem(item) {
   }
   delete F.imageUrl.dataset.source;
   updateBeilage();
+  $('#btnMinAge').hidden = !getApiKey();
+  $('#minAgeInfo').hidden = true;
   pickFolded = !!F.expiry.value;
   syncPicker();
   renderGallery();
@@ -661,6 +663,7 @@ function readForm() {
     manufacturer: F.manufacturer.value.trim(),
     productType: F.productType.value,
     purpose: F.purpose.value,
+    minAge: F.minAge.value === '' ? null : Number(F.minAge.value),
     info: F.info.value.trim(),
     strength: F.strength.value.trim(),
     form: F.form.value,
@@ -1013,6 +1016,7 @@ async function runResearch(bigs, firstNew = 0) {
       F.info.value = [F.info.value, r.produktinfo.trim() + src].filter(Boolean).join('\n');
       done.push('Produktinfo');
     }
+    if (F.minAge.value === '' && Number(r.mindestalter_jahre) >= 0) { F.minAge.value = r.mindestalter_jahre; done.push('Mindestalter'); }
     if (!F.category.value && r.rezeptpflichtig !== 'unbekannt') { F.rx.checked = r.rezeptpflichtig === 'ja'; updateRxWarn(); }
     info.textContent = done.length
       ? `✓ Recherche: ${done.join(', ')} ergänzt. Bitte kurz kontrollieren.`
@@ -1687,7 +1691,63 @@ function renderKeyState() {
   $('#apiKeyState').textContent = k ? `✓ Schlüssel gespeichert (…${k.slice(-4)}). Die Recherche läuft nach dem Fotografieren automatisch.` : 'Kein Schlüssel hinterlegt: Die App arbeitet ohne KI-Recherche.';
   $('#btnSaveKey').textContent = k ? 'Entfernen' : 'Speichern';
   $('#apiKey').hidden = !!k;
+  renderMinAgeBulk();
 }
+
+// ---- Mindestalter mit Claude ermitteln (einzeln im Artikel oder für alle) ----
+const ageText = v => v >= 18 ? 'nur für Erwachsene' : `ab ${String(v).replace('.', ',')} Jahren`;
+$('#btnMinAge').addEventListener('click', async () => {
+  if (!F.name.value.trim()) return toast('Zuerst einen Namen eingeben.');
+  const btn = $('#btnMinAge'), info = $('#minAgeInfo');
+  btn.disabled = true; info.hidden = false;
+  try {
+    const r = await researchMinAge({ ...readForm() }, { onStatus: t => { info.textContent = t; } });
+    if (Number(r.mindestalter_jahre) >= 0) {
+      F.minAge.value = r.mindestalter_jahre;
+      info.textContent = `✓ Zugelassen ${ageText(Number(r.mindestalter_jahre))}.${r.quelle ? ' Quelle: ' + r.quelle : ''} Bitte kurz kontrollieren und speichern.`;
+    } else info.textContent = 'Kein sicher belegtes Mindestalter gefunden. Bitte in der Packungsbeilage nachsehen.';
+  } catch (err) { info.textContent = 'Nicht möglich: ' + err.message; }
+  btn.disabled = false;
+});
+
+function renderMinAgeBulk() {
+  const open = store.getState().items.filter(i => i.minAge == null && !i.minAgeChecked);
+  $('#minAgeBulk').hidden = !getApiKey();
+  $('#minAgeBulkText').textContent = open.length
+    ? `${open.length} Artikel ohne Mindestalter. Claude sucht es in den offiziellen Packungsbeilagen, Artikel für Artikel (dauert etwa 20 Sekunden pro Artikel, Kosten wenige Rappen pro Artikel).`
+    : 'Alle Artikel haben ein Mindestalter oder wurden schon geprüft.';
+  $('#btnMinAgeAll').disabled = !open.length;
+}
+let minAgeRunning = false;
+$('#btnMinAgeAll').addEventListener('click', async () => {
+  if (minAgeRunning) { minAgeRunning = false; return; }
+  const todo = store.getState().items.filter(i => i.minAge == null && !i.minAgeChecked);
+  if (!todo.length) return;
+  minAgeRunning = true;
+  $('#btnMinAgeAll').textContent = '⏹ Anhalten';
+  const st = $('#minAgeBulkStatus');
+  let found = 0, n = 0;
+  for (const item of todo) {
+    if (!minAgeRunning) break;
+    n++;
+    st.textContent = `${n}/${todo.length}: ${shortName(item.name)} …`;
+    try {
+      const r = await researchMinAge(item);
+      const v = Number(r.mindestalter_jahre);
+      store.upsertItem({ id: item.id, ...(v >= 0 ? { minAge: v } : {}), minAgeChecked: true });
+      if (v >= 0) found++;
+    } catch (err) {
+      st.textContent = `Abgebrochen bei ${shortName(item.name)}: ${err.message}`;
+      break;
+    }
+  }
+  const stopped = !minAgeRunning;
+  minAgeRunning = false;
+  $('#btnMinAgeAll').textContent = '🔎 Für alle Artikel ohne Angabe ermitteln';
+  if (!/Abgebrochen/.test(st.textContent)) st.textContent = `${stopped ? 'Angehalten' : 'Fertig'}: bei ${found} von ${n} Artikeln ein Mindestalter gefunden.`;
+  renderMinAgeBulk();
+  renderInventory();
+});
 $('#btnSaveKey').addEventListener('click', () => {
   if (getApiKey()) { setApiKey(''); toast('Schlüssel entfernt'); }
   else {

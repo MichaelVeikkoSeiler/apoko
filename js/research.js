@@ -29,6 +29,10 @@ async function toBase64Jpeg(blob, max = 1280) {
   return c.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
 
+const MIN_AGE_DESC = 'Ab welchem Alter (in Jahren) das Produkt laut offizieller Packungsbeilage/Fachinformation angewendet werden darf, '
+  + 'z. B. 0 = ab Geburt, 2, 6, 12, 18 (nur Erwachsene). Bei Monaten in Jahre umrechnen (6 Monate = 0.5). '
+  + 'Gilt je nach Alter eine andere Form/Stärke, das Alter für genau diese Packung. -1, wenn nicht sicher belegt.';
+
 const SAVE_TOOL = {
   name: 'produkt_speichern',
   description: 'Speichert die recherchierten Angaben zum Produkt in der Hausapotheke. Genau einmal aufrufen, ganz am Schluss. Unbekannte Textfelder als leeren Text "" übergeben.',
@@ -36,7 +40,7 @@ const SAVE_TOOL = {
   input_schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['name', 'hersteller', 'menge', 'einheit', 'darreichungsform', 'art', 'anwendung_allgemein', 'produktinfo', 'rezeptpflichtig', 'quellen', 'frontbild_rahmen'],
+    required: ['name', 'hersteller', 'menge', 'einheit', 'darreichungsform', 'art', 'anwendung_allgemein', 'produktinfo', 'rezeptpflichtig', 'quellen', 'frontbild_rahmen', 'mindestalter_jahre'],
     properties: {
       name: { type: 'string', description: 'Handelsname wie auf der Packung, inkl. Stärke und Form, z. B. "Dafalgan 500 mg, Tabletten"' },
       hersteller: { type: 'string', description: 'Hersteller bzw. Zulassungsinhaberin, z. B. "Bayer (Schweiz) AG"' },
@@ -47,6 +51,7 @@ const SAVE_TOOL = {
       anwendung_allgemein: { type: 'string', description: 'Wofür, in einfacher Sprache, höchstens 8 Wörter, z. B. "Gegen Magen-Darm-Beschwerden"' },
       produktinfo: { type: 'string', description: '3 bis 5 kurze Stichpunkte (je Zeile mit "• "), einfache Sprache: Wofür genau, Wirkstoffe verständlich erklärt, wichtige Hinweise (z. B. Altersgrenze, nicht in der Schwangerschaft). Keine Dosierung, keine Lagertemperatur.' },
       rezeptpflichtig: { type: 'string', enum: ['ja', 'nein', 'unbekannt'] },
+      mindestalter_jahre: { type: 'number', description: MIN_AGE_DESC },
       quellen: { type: 'string', description: 'Die genutzten Webseiten (URLs), durch Leerzeichen getrennt' },
       frontbild_rahmen: {
         type: 'object',
@@ -67,8 +72,9 @@ ${Object.keys(known).length ? `Bereits bekannt (aus Strichcode und der Swissmedi
 Aufgabe:
 1. Erkenne das Produkt anhand aller Fotos (Name, Hersteller, Packungsinhalt wie "100 ml" oder "20 Tabletten").
 2. Recherchiere mit der Websuche die wichtigsten Angaben, bevorzugt aus offiziellen Quellen (Swissmedic, compendium.ch, Herstellerseite). Kläre auch, ob es ein pflanzliches Arzneimittel ist.
-3. Bestimme auf dem ersten Foto den Rahmen um die Verpackung (für den Zuschnitt des Produktbilds).
-4. Rufe am Schluss genau einmal das Werkzeug produkt_speichern auf.
+3. Kläre das zugelassene Mindestalter für genau diese Packung (Packungsbeilage auf compendium.ch oder swissmedicinfo.ch).
+4. Bestimme auf dem ersten Foto den Rahmen um die Verpackung (für den Zuschnitt des Produktbilds).
+5. Rufe am Schluss genau einmal das Werkzeug produkt_speichern auf.
 
 Regeln: Nur Angaben, die auf den Fotos stehen oder in seriösen Quellen belegt sind; was unklar ist, leer lassen. Deutsch und einfach formulieren. Keine Dosierungsempfehlungen und keine Lagertemperatur.`;
 }
@@ -121,4 +127,61 @@ export async function researchProduct({ images, known = {}, onStatus = () => {} 
     messages.push({ role: 'assistant', content: response.content });
   }
   throw new Error('Claude hat keine Angaben geliefert.');
+}
+
+// ---------- Nur Mindestalter recherchieren (für bereits erfasste Artikel, ohne Fotos) ----------
+const AGE_TOOL = {
+  name: 'alter_speichern',
+  description: 'Speichert das recherchierte Mindestalter. Genau einmal aufrufen, ganz am Schluss.',
+  strict: true,
+  input_schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['mindestalter_jahre', 'quelle'],
+    properties: {
+      mindestalter_jahre: { type: 'number', description: MIN_AGE_DESC },
+      quelle: { type: 'string', description: 'Genutzte Webseite (URL), sonst ""' },
+    },
+  },
+};
+
+/** Recherchiert das Mindestalter eines Artikels. Liefert { mindestalter_jahre, quelle }. */
+export async function researchMinAge(item, { onStatus = () => {} } = {}) {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('Kein API-Schlüssel hinterlegt (Einstellungen).');
+  const Anthropic = await loadSdk();
+  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true, timeout: 120_000, maxRetries: 1 });
+  const facts = { name: item.name, hersteller: item.manufacturer, wirkstoff: item.substance, atc: item.atc, form: item.form, packung: item.quantity ? `${item.quantity} ${item.unit}` : '', gtin: item.gtin };
+  const known = Object.fromEntries(Object.entries(facts).filter(([, v]) => v));
+  const messages = [{ role: 'user', content: `Produkt aus einer Hausapotheke in der Schweiz: ${JSON.stringify(known)}
+Suche in der offiziellen Packungsbeilage (compendium.ch oder swissmedicinfo.ch, sonst Herstellerseite), ab welchem Alter genau dieses Produkt angewendet werden darf.
+Rufe dann genau einmal das Werkzeug alter_speichern auf. Wenn nicht sicher belegt: -1.` }];
+  for (let round = 0; round < 3; round++) {
+    onStatus(round === 0 ? 'Claude sucht das Mindestalter …' : 'Suche läuft weiter …');
+    let response;
+    try {
+      response = await client.beta.messages.create({
+        model: MODEL,
+        max_tokens: 8000,
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        output_config: { effort: 'low' },
+        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 2 }, AGE_TOOL],
+        tool_choice: { type: 'auto' },
+        messages,
+      });
+    } catch (err) {
+      if (err instanceof Anthropic.AuthenticationError) throw new Error('API-Schlüssel ungültig.');
+      if (err instanceof Anthropic.RateLimitError) throw new Error('Zu viele Anfragen, bitte später nochmals versuchen.');
+      if (err instanceof Anthropic.APIConnectionError) throw new Error('Keine Verbindung zur Anthropic-API.');
+      if (err instanceof Anthropic.APIError) throw new Error(`Anthropic-API meldet Fehler ${err.status ?? ''}.`.trim());
+      throw err;
+    }
+    if (response.stop_reason === 'refusal') throw new Error('Die Anfrage wurde abgelehnt.');
+    const save = response.content.find(b => b.type === 'tool_use' && b.name === 'alter_speichern');
+    if (save) return save.input;
+    if (response.stop_reason !== 'pause_turn') break;
+    messages.push({ role: 'assistant', content: response.content });
+  }
+  throw new Error('Kein Mindestalter gefunden.');
 }
