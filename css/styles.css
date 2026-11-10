@@ -540,3 +540,13 @@ dialog { background: var(--bg); }
 #helpPersonInfo { margin: 2px 0 10px; }
 .person-btn strong { font-size: 1.02rem; }
 .help-next.seen { display: none; }
+
+/* Personenbilder */
+.avatar { display: inline-block; width: 40px; height: 40px; object-fit: contain; vertical-align: middle; }
+.avatar.emoji { font-size: 1.8rem; line-height: 40px; text-align: center; }
+.avatar.big { width: 76px; height: 76px; filter: drop-shadow(0 4px 10px rgb(0 0 0 / .45)); }
+.avatar.big.emoji { font-size: 2.6rem; line-height: 76px; }
+.avatar.small { width: 34px; height: 34px; margin: -6px 4px -6px 0; }
+.for-who { display: flex; align-items: center; gap: 4px; }
+.pi .avatar { width: 100%; height: 100%; }
+.person-head span.pi { display: inline-flex; align-items: center; justify-content: center; cursor: default; overflow: hidden; }
