@@ -262,6 +262,9 @@ export function personCheck(item, person) {
   const atc = String(item.atc || '').toUpperCase();
   const age = Number(person.age), kg = Number(person.weight);
   const kid = age < 12, under16 = age < 16;
+  const minAge = item.minAge == null || item.minAge === '' ? null : Number(item.minAge);
+  if (minAge != null && minAge >= 0 && age < minAge)
+    return { block: minAge >= 18 ? 'Nur für Erwachsene zugelassen.' : `Erst ab ${String(minAge).replace('.', ',')} Jahren zugelassen.` };
 
   if (under16 && (atc.startsWith('N02BA') || atc.startsWith('B01AC06') || /acetylsalicyl|aspirin/.test(hay)))
     return { block: 'Acetylsalicylsäure (z. B. Aspirin) nicht für Kinder und Jugendliche unter 16 Jahren (Gefahr Reye-Syndrom).' };
@@ -278,7 +281,8 @@ export function personCheck(item, person) {
     return { caution: `Erwachsenenstärke (${mg} mg): für ${kg} kg meist zu hoch. Kinderpräparat verwenden oder in der Apotheke fragen.` };
   if ((atc.startsWith('R01AA') || /xylometazolin|oxymetazolin/.test(hay)) && !/kind|junior|baby|0[.,]05/.test(hay))
     return { note: 'Für Kinder nur Nasenspray in Kinderstärke verwenden.' };
-  return { note: `Für Kinder: ab welchem Alter erlaubt und Dosierung nach Gewicht (${kg} kg) in der Packungsbeilage prüfen.` };
+  if (minAge != null && minAge >= 0) return { note: `Ab ${String(minAge).replace('.', ',')} Jahren zugelassen. Dosierung nach Gewicht (${kg} kg) laut Packungsbeilage.` };
+  return { note: `Für Kinder: Mindestalter unbekannt. Ab welchem Alter erlaubt und Dosierung nach Gewicht (${kg} kg) in der Packungsbeilage prüfen.` };
 }
 
 /**
