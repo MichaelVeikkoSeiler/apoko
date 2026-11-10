@@ -1424,8 +1424,7 @@ function recRow(item, st, { linkedName = '', expired = false, note = '', blocked
     ${thumb}<div class="txt"><strong>${esc(item.name)}</strong><small>${esc(sub)}</small>${note ? `<span class="note">⚠️ ${esc(note)}</span>` : ''}</div></div>`;
 }
 
-// Ablauf: 1. Beschwerden → „Weiter: Für wen?“ → 2. Person wählen → 3. Empfehlung
-let helpStep = 'input';
+// Ablauf: 1. Person wählen („Veikko hat …“) → 2. Beschwerden → Empfehlung erscheint sofort
 let helpPerson = null;
 
 const personText = p => [`${p.age} J`, `${p.weight} kg`, p.height ? `${p.height} cm` : ''].filter(Boolean).join(' · ');
@@ -1440,30 +1439,32 @@ function renderHelp() {
   const { detected, ids } = currentSymptomIds();
   renderSymptomChips(detected);
   $('#emergency').textContent = EMERGENCY;
-  if (!ids.length && helpStep !== 'input') helpStep = 'input';
 
-  const next = $('#btnHelpNext');
-  next.disabled = !ids.length;
-  next.parentElement.hidden = helpStep !== 'input';
-  next.textContent = ids.length ? `Weiter: Für wen? →` : 'Beschwerde eingeben oder antippen';
-
-  // Schritt 2: Person wählen
+  // Schritt 1: Person wählen
   const people = store.getState().people;
-  $('#personPick').hidden = helpStep !== 'person';
+  const person = people.find(p => p.id === helpPerson);
+  $('#personPick').hidden = !!person;
   $('#personButtons').innerHTML = people.map(p => `
     <button type="button" class="person-btn" data-person="${esc(p.id)}">
-      <span class="pi">${p.icon || '🙂'}</span><strong>${esc(p.label)}</strong><small>${esc(personText(p))}${p.confirmed ? '' : ' · unbestätigt'}</small>
+      <span class="pi">${p.icon || '🙂'}</span><strong>${esc(p.label)} hat …</strong><small>${esc(personText(p))}${p.confirmed ? '' : ' · unbestätigt'}</small>
     </button>`).join('');
   $('#personUnconfirmed').hidden = people.every(p => p.confirmed);
 
-  if (helpStep !== 'result' || !helpPerson) {
-    $('#adviceResult').innerHTML = !ids.length && text.trim()
+  // Schritt 2: Beschwerden
+  $('#complaintCard').hidden = !person;
+  const next = $('#btnHelpNext');
+  next.parentElement.hidden = !person || !ids.length;
+  if (!person) { $('#adviceResult').innerHTML = ''; return; }
+  $('#helpTitle').textContent = `${person.icon || ''} ${person.label} hat …`.trim();
+  $('#helpPersonInfo').textContent = personText(person) + (person.confirmed ? '' : ' · Angaben unbestätigt');
+  next.textContent = `Empfehlung anzeigen ↓`;
+  if (!ids.length) {
+    $('#adviceResult').innerHTML = text.trim()
       ? '<p class="muted" style="text-align:center">Nicht erkannt. Tippe oben auf eine passende Beschwerde.</p>' : '';
     return;
   }
 
-  // Schritt 3: Empfehlung für diese Person
-  const person = people.find(p => p.id === helpPerson) || people[0];
+  // Empfehlung für diese Person
   const { items, linked } = store.getState();
   const results = adviseFor(ids, items, store.expiryStatus, person);
   const linkedItems = linked.flatMap(h => h.items.map(i => ({ ...i, _hh: h.name })));
@@ -1471,7 +1472,7 @@ function renderHelp() {
   const kid = person.age < 12;
   $('#adviceResult').innerHTML = `
     <div class="card for-person">
-      <div><strong>Für: ${person.icon || ''} ${esc(person.label)}</strong><br><small class="muted">${esc(personText(person))}${person.confirmed ? '' : ' · Angaben unbestätigt'}</small></div>
+      <div><strong>Empfehlung für ${person.icon || ''} ${esc(person.label)}</strong></div>
       <div class="row" style="margin:0"><button type="button" class="btn small-btn" data-help="person">Andere Person</button><button type="button" class="btn small-btn" data-help="new">Neu</button></div>
     </div>
     <p class="hint small">${kid
@@ -1501,7 +1502,6 @@ function renderHelp() {
   });
 }
 
-function backToInput() { helpStep = 'input'; renderHelp(); }
 
 let helpTimer;
 // ---- Beschwerden per Sprache (Spracherkennung des Browsers, Deutsch) ----
@@ -1537,7 +1537,7 @@ if (SpeechRec) {
 
 $('#complaint').addEventListener('input', () => {
   clearTimeout(helpTimer);
-  helpTimer = setTimeout(() => { if (helpStep !== 'input') helpStep = 'input'; renderHelp(); }, 250);
+  helpTimer = setTimeout(renderHelp, 250);
 });
 $('#symptomChips').addEventListener('click', e => {
   if (e.target.closest('[data-more]')) { showAllSymptoms = !showAllSymptoms; return renderHelp(); }
@@ -1546,29 +1546,26 @@ $('#symptomChips').addEventListener('click', e => {
   const id = b.dataset.sym;
   if (detectSymptoms($('#complaint').value).includes(id)) return; // kommt aus dem Text
   pickedSymptoms.has(id) ? pickedSymptoms.delete(id) : pickedSymptoms.add(id);
-  helpStep = 'input';
   renderHelp();
 });
 $('#btnHelpNext').addEventListener('click', () => {
-  if (!currentSymptomIds().ids.length) return;
-  helpStep = 'person';
-  renderHelp();
-  $('#personPick').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('#adviceResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 $('#personButtons').addEventListener('click', e => {
   const b = e.target.closest('[data-person]');
   if (!b) return;
   helpPerson = b.dataset.person;
-  helpStep = 'result';
   renderHelp();
-  $('#adviceResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 });
+const choosePersonAgain = () => { helpPerson = null; renderHelp(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+$('#btnOtherPerson').addEventListener('click', choosePersonAgain);
 $('#adviceResult').addEventListener('click', e => {
   const act = e.target.closest('[data-help]')?.dataset.help;
-  if (act === 'person') { helpStep = 'person'; renderHelp(); return $('#personPick').scrollIntoView({ behavior: 'smooth' }); }
+  if (act === 'person') return choosePersonAgain();
   if (act === 'new') {
-    $('#complaint').value = ''; pickedSymptoms.clear(); helpPerson = null;
-    backToInput(); window.scrollTo({ top: 0, behavior: 'smooth' }); return;
+    $('#complaint').value = ''; pickedSymptoms.clear();
+    return choosePersonAgain();
   }
   const r = e.target.closest('[data-open]');
   if (r) openItem(store.getState().items.find(i => i.id === r.dataset.open));
@@ -1720,4 +1717,10 @@ handleHash();
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// „Empfehlung anzeigen“ ausblenden, sobald die Empfehlung im Bild ist
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver(([e]) => $('.help-next').classList.toggle('seen', e.isIntersecting), { rootMargin: '0px 0px -120px 0px' })
+    .observe($('#adviceResult'));
 }

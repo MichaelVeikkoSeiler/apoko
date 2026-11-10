@@ -97,9 +97,18 @@
     <!-- Checkliste -->
     <!-- Beschwerden -->
     <section id="view-help" class="view" aria-label="Beschwerden">
-      <div class="card">
-        <h2>Was hast du für Beschwerden?</h2>
+      <div id="personPick" class="card">
+        <h2>Wer hat Beschwerden?</h2>
+        <div id="personButtons" class="person-grid"></div>
+        <p id="personUnconfirmed" class="muted small" hidden>⚠️ Alter und Gewicht sind noch nicht bestätigt. Anpassen unter Einstellungen → Personen.</p>
         <p class="muted small">Die App sucht in deinem Vorrat, was passt. Keine Diagnose: Packungsbeilage beachten, im Zweifel Apotheke oder Ärztin fragen.</p>
+      </div>
+      <div id="complaintCard" class="card" hidden>
+        <div class="help-who">
+          <h2 id="helpTitle"></h2>
+          <button type="button" class="linkbtn" id="btnOtherPerson">andere Person</button>
+        </div>
+        <p id="helpPersonInfo" class="muted small"></p>
         <div class="complaint-row">
           <textarea id="complaint" rows="2" placeholder="z. B. Kopfweh und etwas Fieber"></textarea>
           <button type="button" id="btnMic" class="mic-btn" aria-label="Sprechen" hidden>🎤</button>
@@ -107,14 +116,9 @@
         <p id="micStatus" class="muted small" hidden></p>
         <div id="symptomChips" class="chips wrap"></div>
       </div>
-      <div id="personPick" class="card" hidden>
-        <h2>Für wen?</h2>
-        <div id="personButtons" class="person-grid"></div>
-        <p id="personUnconfirmed" class="muted small" hidden>⚠️ Alter und Gewicht sind noch nicht bestätigt. Anpassen unter Einstellungen → Personen.</p>
-      </div>
       <div id="adviceResult"></div>
       <div class="help-next">
-        <button type="button" id="btnHelpNext" class="btn primary wide" disabled>Weiter: Für wen? →</button>
+        <button type="button" id="btnHelpNext" class="btn primary wide">Empfehlung anzeigen ↓</button>
       </div>
       <p class="emergency small" id="emergency"></p>
     </section>
