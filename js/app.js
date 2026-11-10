@@ -1452,9 +1452,9 @@ function renderHelp() {
   $('#personPick').hidden = !!person;
   $('#personButtons').innerHTML = people.map(p => `
     <button type="button" class="person-btn" data-person="${esc(p.id)}">
-      ${avatar(p, 'big')}<strong>${esc(p.label)} hat …</strong><small>${esc(personText(p))}${p.confirmed ? '' : ' · unbestätigt'}</small>
+      ${avatar(p, 'big')}<strong>${esc(p.label)} hat …</strong>
     </button>`).join('');
-  $('#personUnconfirmed').hidden = people.every(p => p.confirmed);
+  $('#personUnconfirmed').hidden = true; // Angaben nur intern für die Einschätzung
 
   // Schritt 2: Beschwerden
   $('#complaintCard').hidden = !person;
@@ -1462,7 +1462,7 @@ function renderHelp() {
   next.parentElement.hidden = !person || !ids.length;
   if (!person) { $('#adviceResult').innerHTML = ''; return; }
   $('#helpTitle').innerHTML = `${avatar(person, 'small')} ${esc(person.label)} hat …`;
-  $('#helpPersonInfo').textContent = personText(person) + (person.confirmed ? '' : ' · Angaben unbestätigt');
+  $('#helpPersonInfo').hidden = true;
   next.textContent = `Empfehlung anzeigen ↓`;
   if (!ids.length) {
     $('#adviceResult').innerHTML = text.trim()
