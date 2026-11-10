@@ -1426,6 +1426,12 @@ function recRow(item, st, { linkedName = '', expired = false, note = '', blocked
 // Ablauf: 1. Person wählen („Veikko hat …“) → 2. Beschwerden → Empfehlung erscheint sofort
 let helpPerson = null;
 
+// Feste Bilder für die vier Personen (statt Emoji)
+const AVATARS = { mann: 'img/people/mann.webp', frau: 'img/people/frau.webp', kind1: 'img/people/kind1.webp', kind2: 'img/people/kind2.webp' };
+const avatar = (p, cls = '') => AVATARS[p.id]
+  ? `<img class="avatar ${cls}" src="${AVATARS[p.id]}" alt="">`
+  : `<span class="avatar emoji ${cls}">${p.icon || '🙂'}</span>`;
+
 const personText = p => [`${p.age} J`, `${p.weight} kg`, p.height ? `${p.height} cm` : ''].filter(Boolean).join(' · ');
 
 function currentSymptomIds() {
@@ -1445,7 +1451,7 @@ function renderHelp() {
   $('#personPick').hidden = !!person;
   $('#personButtons').innerHTML = people.map(p => `
     <button type="button" class="person-btn" data-person="${esc(p.id)}">
-      <span class="pi">${p.icon || '🙂'}</span><strong>${esc(p.label)} hat …</strong><small>${esc(personText(p))}${p.confirmed ? '' : ' · unbestätigt'}</small>
+      ${avatar(p, 'big')}<strong>${esc(p.label)} hat …</strong><small>${esc(personText(p))}${p.confirmed ? '' : ' · unbestätigt'}</small>
     </button>`).join('');
   $('#personUnconfirmed').hidden = people.every(p => p.confirmed);
 
@@ -1454,7 +1460,7 @@ function renderHelp() {
   const next = $('#btnHelpNext');
   next.parentElement.hidden = !person || !ids.length;
   if (!person) { $('#adviceResult').innerHTML = ''; return; }
-  $('#helpTitle').textContent = `${person.icon || ''} ${person.label} hat …`.trim();
+  $('#helpTitle').innerHTML = `${avatar(person, 'small')} ${esc(person.label)} hat …`;
   $('#helpPersonInfo').textContent = personText(person) + (person.confirmed ? '' : ' · Angaben unbestätigt');
   next.textContent = `Empfehlung anzeigen ↓`;
   if (!ids.length) {
@@ -1471,7 +1477,7 @@ function renderHelp() {
   const kid = person.age < 12;
   $('#adviceResult').innerHTML = `
     <div class="card for-person">
-      <div><strong>Empfehlung für ${person.icon || ''} ${esc(person.label)}</strong></div>
+      <div class="for-who">${avatar(person, 'small')}<strong>Empfehlung für ${esc(person.label)}</strong></div>
       <div class="row" style="margin:0"><button type="button" class="btn small-btn" data-help="person">Andere Person</button><button type="button" class="btn small-btn" data-help="new">Neu</button></div>
     </div>
     <p class="hint small">${kid
@@ -1579,7 +1585,7 @@ function renderPeople() {
   $('#peopleList').innerHTML = store.getState().people.map(p => `
     <div class="person-row" data-pid="${esc(p.id)}">
       <div class="person-head">
-        <button type="button" class="pi" data-emoji-toggle aria-label="Emoji wählen" title="Emoji wählen">${p.icon || '🙂'}</button>
+        ${AVATARS[p.id] ? `<span class="pi">${avatar(p)}</span>` : `<button type="button" class="pi" data-emoji-toggle aria-label="Emoji wählen" title="Emoji wählen">${p.icon || '🙂'}</button>`}
         <input data-f="label" value="${esc(p.label)}" aria-label="Name">
       </div>
       ${emojiOpenFor === p.id ? `<div class="emoji-grid">${PERSON_EMOJIS.map(e => `<button type="button" data-emoji="${e}" class="${e === p.icon ? 'active' : ''}">${e}</button>`).join('')}</div>` : ''}
