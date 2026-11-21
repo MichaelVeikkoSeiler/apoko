@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bilder-Puzzle</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#e6eef5">
+<style>
+/* Layout: Menü = Einstellungen oben, Bildergalerie darunter. Spiel = Vollbild, Rahmen in der Mitte, Teile rundherum verstreut. */
+:root {
+  --paper: #e6eef5;      /* Spielfläche, kühles Hellgrau-Blau */
+  --frame: #cfdae4;      /* Puzzle-Rahmen */
+  --ink: #1d2747;        /* Schrift, Marineblau */
+  --ink-soft: #55607e;
+  --card: #ffffff;
+  --sun: #ffc531;        /* Auswahl, Akzent */
+  --tomato: #f0473c;     /* Zurück-Pfeil */
+  --leaf: #2fa55a;       /* Erfolg */
+  --line: #c3cfdb;
+  --font: ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: var(--font); font-size: 17px;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, label:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+/* ---------- Menü ---------- */
+#menu {
+  min-height: 100%;
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1100px; margin: 0 auto; display: grid; gap: 22px; }
+.title { display: flex; align-items: center; gap: 14px; }
+.title svg { flex: none; }
+h1 { margin: 0; font-size: clamp(30px, 5vw, 46px); line-height: 1; letter-spacing: -.01em; }
+.title p { margin: 4px 0 0; color: var(--ink-soft); }
+.settings {
+  background: var(--card); border-radius: 22px; padding: 18px;
+  display: grid; gap: 16px; box-shadow: 0 2px 0 var(--line);
+}
+.setting { display: grid; gap: 8px; }
+.setting h2 { margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft); }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt {
+  min-width: 56px; height: 56px; padding: 0 14px; border-radius: 16px;
+  border: 2px solid var(--line); background: var(--paper);
+  font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.opt.small { font-size: 17px; font-weight: 700; }
+.opt[aria-pressed="true"] { background: var(--sun); border-color: #e0a800; box-shadow: 0 3px 0 #e0a800; }
+.row2 { display: flex; flex-wrap: wrap; gap: 16px 28px; }
+
+.gallery-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.gallery-head h2 { margin: 0; font-size: 24px; }
+.gallery-head p { margin: 0; color: var(--ink-soft); }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 14px; }
+.tile {
+  position: relative; aspect-ratio: 4 / 3; max-width: 100%;
+  border-radius: 18px; overflow: hidden; border: 0; padding: 0;
+  background: var(--card); box-shadow: 0 3px 0 var(--line);
+  transition: transform .12s;
+}
+.tile:active { transform: scale(.97); }
+.tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile .name {
+  position: absolute; left: 8px; bottom: 8px; padding: 3px 10px; border-radius: 99px;
+  background: rgb(255 255 255 / .9); font-weight: 700; font-size: 15px;
+}
+.tile.add {
+  display: grid; place-content: center; justify-items: center; gap: 6px;
+  border: 3px dashed var(--line); box-shadow: none; background: transparent; color: var(--ink-soft);
+  font-weight: 700; text-align: center; padding: 10px;
+}
+.tile.add .plus {
+  width: 58px; height: 58px; border-radius: 50%; background: var(--sun); color: var(--ink);
+  display: grid; place-items: center; font-size: 38px; line-height: 1; font-weight: 800;
+}
+.tile.add input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.del {
+  position: absolute; top: 6px; right: 6px; height: 36px; min-width: 36px; padding: 0 10px;
+  border-radius: 99px; border: 0; background: rgb(255 255 255 / .92); font-weight: 800; font-size: 16px;
+}
+.del.armed { background: var(--tomato); color: #fff; }
+.note { color: var(--ink-soft); font-size: 14px; margin: 0; }
+
+/* ---------- Spiel ---------- */
+#game {
+  position: fixed; inset: 0; overflow: hidden; background: var(--paper);
+  touch-action: none; overscroll-behavior: none;
+}
+#board { position: absolute; border-radius: 4px; background: var(--frame); box-shadow: inset 0 0 0 2px var(--line); }
+#board canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#full { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity .8s; pointer-events: none; border-radius: 4px; }
+#full.show { opacity: 1; }
+.piece {
+  position: absolute; left: 0; top: 0; touch-action: none; cursor: grab;
+  filter: drop-shadow(0 2px 3px rgb(20 30 60 / .35));
+  transition: filter .15s;
+  will-change: transform;
+}
+.piece.drag { cursor: grabbing; filter: drop-shadow(0 10px 12px rgb(20 30 60 / .35)); }
+.piece.placed { filter: none; pointer-events: none; }
+.piece.snap { transition: transform .18s ease-out; }
+.gbtn {
+  position: absolute; z-index: 5000; border: 0; border-radius: 99px;
+  background: rgb(255 255 255 / .85); box-shadow: 0 2px 0 var(--line);
+  height: 52px; min-width: 52px; padding: 0 14px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 800; font-size: 18px;
+}
+#back { left: calc(10px + env(safe-area-inset-left, 0px)); top: calc(10px + env(safe-area-inset-top, 0px)); background: none; box-shadow: none; padding: 0; }
+#counter { right: calc(10px + env(safe-area-inset-right, 0px)); top: calc(10px + env(safe-area-inset-top, 0px)); pointer-events: none; font-variant-numeric: tabular-nums; }
+#ghostBtn { right: calc(10px + env(safe-area-inset-right, 0px)); top: calc(70px + env(safe-area-inset-top, 0px)); }
+#ghostBtn[aria-pressed="false"] { opacity: .55; }
+#confetti { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6000; }
+#win {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 7000; display: grid; justify-items: center;
+  padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); pointer-events: none;
+}
+#win .card {
+  background: var(--card); border-radius: 26px; padding: 26px 28px; text-align: center;
+  box-shadow: 0 6px 0 var(--line), 0 20px 50px rgb(20 30 60 / .2);
+  display: grid; gap: 14px; pointer-events: auto; animation: pop .45s cubic-bezier(.2, 1.6, .4, 1);
+}
+#win h2 { margin: 0; font-size: clamp(28px, 5vw, 44px); }
+#win .opts { justify-content: center; }
+#win .opt { font-size: 19px; height: 60px; padding: 0 22px; }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  #win .card { animation: none; }
+  .piece.snap { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<section id="menu">
+  <div class="wrap">
+    <div class="title">
+      <svg width="58" height="58" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M6 6h20a7 7 0 1 1 12 0h20v20a7 7 0 1 0 0 12v20H38a7 7 0 1 0-12 0H6V38a7 7 0 1 1 0-12z" fill="#ffc531" stroke="#1d2747" stroke-width="3" stroke-linejoin="round"/>
+      </svg>
+      <div>
+        <h1>Bilder-Puzzle</h1>
+        <p>Wähle die Anzahl Teile, dann tippe auf ein Bild.</p>
+      </div>
+    </div>
+
+    <div class="settings">
+      <div class="setting">
+        <h2>Wie viele Teile?</h2>
+        <div class="opts" id="counts"></div>
+      </div>
+      <div class="row2">
+        <div class="setting">
+          <h2>Form der Teile</h2>
+          <div class="opts" id="shapes">
+            <button class="opt small" type="button" data-shape="square" id="shapeSquare">
+              <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="2" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>Quadrate</button>
+            <button class="opt small" type="button" data-shape="jigsaw" id="shapeJigsaw">
+              <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true"><path d="M6 6h20a7 7 0 1 1 12 0h20v20a7 7 0 1 0 0 12v20H38a7 7 0 1 0-12 0H6V38a7 7 0 1 1 0-12z" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="round"/></svg>Puzzleteile</button>
+          </div>
+        </div>
+        <div class="setting">
+          <h2>Hilfe</h2>
+          <div class="opts">
+            <button class="opt small" type="button" id="ghostOpt" aria-pressed="true">Bild im Rahmen zeigen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gallery-head">
+      <h2>Bild antippen und los!</h2>
+      <p>Eigene Fotos bleiben auf diesem Gerät.</p>
+    </div>
+    <div class="gallery" id="gallery">
+      <label class="tile add" id="addTile">
+        <span class="plus" aria-hidden="true">+</span>
+        <span>Eigenes Bild<br>oder Foto</span>
+        <input type="file" id="fileInput" accept="image/*" multiple aria-label="Eigenes Bild hinzufügen">
+      </label>
+    </div>
+    <p class="note" id="storeNote" hidden>Hinweis: Dieser Browser speichert keine Bilder. Eigene Bilder sind nach dem Schliessen wieder weg.</p>
+  </div>
+</section>
+
+<section id="game" hidden>
+  <div id="board"><canvas id="boardCanvas"></canvas><canvas id="full"></canvas></div>
+  <button class="gbtn" id="back" type="button" aria-label="Zurück zur Bildauswahl">
+    <svg width="78" height="52" viewBox="0 0 78 52" aria-hidden="true">
+      <path d="M30 4 4 28l26 20V36c16 0 30 2 42 12-4-20-18-32-42-34z" fill="#f0473c" stroke="#9e2219" stroke-width="3" stroke-linejoin="round"/>
+    </svg>
+  </button>
+  <div class="gbtn" id="counter" aria-live="polite">0 / 0</div>
+  <button class="gbtn" id="ghostBtn" type="button" aria-pressed="true" aria-label="Bild im Rahmen zeigen">
+    <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>
+  </button>
+  <canvas id="confetti"></canvas>
+  <div id="win" hidden>
+    <div class="card">
+      <h2>Super gemacht!</h2>
+      <div class="opts">
+        <button class="opt" type="button" id="again" aria-pressed="true">Nochmal</button>
+        <button class="opt" type="button" id="other">Anderes Bild</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= Einstellungen ================= */
+const COUNTS = [4, 6, 9, 12, 16, 20, 25, 30, 36, 48];
+const settings = { count: 9, shape: 'jigsaw', ghost: true };
+try { Object.assign(settings, JSON.parse(localStorage.getItem('puzzle-settings') || '{}')); } catch (e) {}
+const saveSettings = () => { try { localStorage.setItem('puzzle-settings', JSON.stringify(settings)); } catch (e) {} };
+
+const $ = id => document.getElementById(id);
+const countsEl = $('counts');
+COUNTS.forEach(n => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'opt'; b.textContent = n; b.dataset.n = n;
+  b.addEventListener('click', () => { settings.count = n; saveSettings(); syncSettings(); });
+  countsEl.appendChild(b);
+});
+document.querySelectorAll('#shapes .opt').forEach(b =>
+  b.addEventListener('click', () => { settings.shape = b.dataset.shape; saveSettings(); syncSettings(); }));
+$('ghostOpt').addEventListener('click', () => { settings.ghost = !settings.ghost; saveSettings(); syncSettings(); });
+function syncSettings() {
+  countsEl.querySelectorAll('.opt').forEach(b => b.setAttribute('aria-pressed', +b.dataset.n === settings.count));
+  document.querySelectorAll('#shapes .opt').forEach(b => b.setAttribute('aria-pressed', b.dataset.shape === settings.shape));
+  $('ghostOpt').setAttribute('aria-pressed', settings.ghost);
+  $('ghostBtn').setAttribute('aria-pressed', settings.ghost);
+}
+syncSettings();
+
+/* ================= Beispielbilder (selbst gezeichnet) ================= */
+const rnd = (a, b) => a + Math.random() * (b - a);
+function seeded(seed) { return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
+
+function spaceSVG() {
+  const r = seeded(7); let stars = '';
+  for (let i = 0; i < 70; i++) stars += `<circle cx="${r() * 1200}" cy="${r() * 900}" r="${1.5 + r() * 3}" fill="#fff" opacity="${.5 + r() * .5}"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#14185e"/><stop offset="1" stop-color="#3a2a9a"/></linearGradient></defs>
+  <rect width="1200" height="900" fill="url(#g)"/>${stars}
+  <path d="M60 120 l14 30 32 4 -24 22 6 32 -28 -16 -28 16 6 -32 -24 -22 32 -4z" fill="#ffe14d"/>
+  <g transform="translate(300 260)"><circle r="150" fill="#ff8a3d"/><path d="M-150 0a150 150 0 0 0 300 0" fill="#e0622a"/>
+    <path d="M-120 -40h240M-140 30h280" stroke="#ffb27a" stroke-width="18" stroke-linecap="round"/>
+    <ellipse rx="250" ry="56" fill="none" stroke="#c6f04a" stroke-width="22" transform="rotate(-18)"/></g>
+  <path d="M0 900V700c140-60 330-70 470-10s140 210 140 210z" fill="#7fd08b"/>
+  <circle cx="150" cy="790" r="44" fill="#5bb26b"/><circle cx="330" cy="760" r="28" fill="#5bb26b"/><circle cx="470" cy="850" r="34" fill="#5bb26b"/>
+  <g transform="translate(820 420) rotate(28)">
+    <path d="M-60 120c-30 40-30 90 0 130 30-40 30-90 0-130z" fill="#ffb020"/><path d="M60 120c-30 40-30 90 0 130 30-40 30-90 0-130z" fill="#ffb020"/>
+    <path d="M0 -260c90 90 100 250 70 380H-70c-30-130-20-290 70-380z" fill="#f2f4fb" stroke="#1d2747" stroke-width="8"/>
+    <path d="M0 -260c40 40 60 80 68 120H-68c8-40 28-80 68-120z" fill="#ef3e4a" stroke="#1d2747" stroke-width="8"/>
+    <circle cy="-40" r="44" fill="#56c8f5" stroke="#1d2747" stroke-width="10"/>
+    <path d="M-70 60l-70 90v40l70-40zM70 60l70 90v40l-70-40z" fill="#ef3e4a" stroke="#1d2747" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M-40 120c0 70 20 120 40 150 20-30 40-80 40-150z" fill="#ff5b2e"/><path d="M-20 120c0 50 10 80 20 110 10-30 20-60 20-110z" fill="#ffe14d"/></g>
+  <g transform="translate(1000 140)"><ellipse rx="120" ry="34" fill="#a9b4c8" stroke="#1d2747" stroke-width="6"/><path d="M-60-10c0-50 120-50 120 0z" fill="#9ee8ff" stroke="#1d2747" stroke-width="6"/>
+    <circle cx="0" cy="-30" r="16" fill="#8ee05a"/><circle cx="0" cy="-33" r="6" fill="#1d2747"/>
+    <circle cx="-70" cy="4" r="9" fill="#ffe14d"/><circle cx="-25" cy="12" r="9" fill="#ff7ad0"/><circle cx="25" cy="12" r="9" fill="#ffe14d"/><circle cx="70" cy="4" r="9" fill="#ff7ad0"/></g>
+  <g transform="translate(540 700)"><circle r="40" fill="#b07cff"/><circle cx="-12" cy="-8" r="9" fill="#fff"/></g>
+  <path d="M780 820 1150 640" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity=".7"/><circle cx="1150" cy="640" r="24" fill="#fff6c2"/>
+</svg>`;
+}
+
+function seaSVG() {
+  const r = seeded(11); let bubbles = '';
+  for (let i = 0; i < 26; i++) bubbles += `<circle cx="${200 + r() * 900}" cy="${60 + r() * 600}" r="${6 + r() * 16}" fill="none" stroke="#e8fbff" stroke-width="4" opacity=".8"/>`;
+  const fish = (x, y, s, c1, c2, flip) => `<g transform="translate(${x} ${y}) scale(${flip ? -s : s} ${s})">
+    <path d="M-110 0c40-70 140-70 180 0-40 70-140 70-180 0z" fill="${c1}" stroke="#1d2747" stroke-width="7"/>
+    <path d="M60 0l70-50v100z" fill="${c2}" stroke="#1d2747" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M-30-48c10 30 10 66 0 96M10-50c10 30 10 70 0 100" stroke="${c2}" stroke-width="16" fill="none"/>
+    <circle cx="-70" cy="-12" r="14" fill="#fff" stroke="#1d2747" stroke-width="5"/><circle cx="-73" cy="-12" r="6" fill="#1d2747"/></g>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
+  <defs><linearGradient id="w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fc6e8"/><stop offset="1" stop-color="#0d5fa8"/></linearGradient></defs>
+  <rect width="1200" height="900" fill="url(#w)"/>
+  <path d="M200 0 120 700M480 0 520 700M820 0 980 700" stroke="#ffffff" stroke-width="60" opacity=".08"/>
+  <path d="M0 760c200-50 400-30 600 0s400 40 600-10v150H0z" fill="#f4d58d"/>
+  <path d="M90 780c-40-120 40-200 0-330M120 780c40-140-30-220 30-360M1080 790c-40-100 40-170 0-280M1110 790c50-110-20-200 30-310" stroke="#2fa55a" stroke-width="22" fill="none" stroke-linecap="round"/>
+  ${bubbles}
+  ${fish(380, 260, 1.15, '#ffb020', '#ff6a2a', false)}
+  ${fish(860, 420, 1, '#ff7ad0', '#b04cd6', true)}
+  ${fish(470, 560, .8, '#8ee05a', '#2fa55a', true)}
+  <g transform="translate(830 790)"><ellipse rx="70" ry="44" fill="#ef3e4a" stroke="#1d2747" stroke-width="6"/>
+    <path d="M-60-20c-40-30-70-20-80 10M60-20c40-30 70-20 80 10" stroke="#ef3e4a" stroke-width="18" fill="none" stroke-linecap="round"/>
+    <circle cx="-20" cy="-52" r="12" fill="#fff" stroke="#1d2747" stroke-width="4"/><circle cx="20" cy="-52" r="12" fill="#fff" stroke="#1d2747" stroke-width="4"/>
+    <circle cx="-20" cy="-52" r="5" fill="#1d2747"/><circle cx="20" cy="-52" r="5" fill="#1d2747"/></g>
+  <path d="M300 820l14-38 40-4-30-26 10-40-34 22-34-22 10 40-30 26 40 4z" fill="#ff8a3d" stroke="#1d2747" stroke-width="5" stroke-linejoin="round" transform="rotate(8 300 780)"/>
+  <ellipse cx="560" cy="830" rx="50" ry="22" fill="#c9a45c"/><ellipse cx="640" cy="845" rx="30" ry="14" fill="#d9b36b"/>
+  <g transform="translate(1020 150)"><ellipse rx="90" ry="70" fill="#9b7cff" opacity=".9"/><path d="M-70 40c0 80 20 120-10 170M-30 50c10 80-20 120 0 170M10 50c0 80 30 110 0 170M50 40c20 80-10 120 20 170" stroke="#9b7cff" stroke-width="12" fill="none" stroke-linecap="round"/>
+    <circle cx="-25" cy="-5" r="8" fill="#1d2747"/><circle cx="25" cy="-5" r="8" fill="#1d2747"/></g>
+</svg>`;
+}
+
+function meadowSVG() {
+  const r = seeded(5); let flowers = '';
+  const cols = ['#ff5b6e', '#ffe14d', '#b07cff', '#ffffff', '#ff8a3d'];
+  for (let i = 0; i < 22; i++) {
+    const x = 40 + r() * 1120, y = 690 + r() * 190, c = cols[i % cols.length];
+    flowers += `<g transform="translate(${x} ${y})"><path d="M0 0v40" stroke="#1f7a3e" stroke-width="5"/>${[0, 72, 144, 216, 288].map(a => `<circle cx="${14 * Math.cos(a * Math.PI / 180)}" cy="${14 * Math.sin(a * Math.PI / 180)}" r="11" fill="${c}"/>`).join('')}<circle r="8" fill="#ffb020"/></g>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
+  <rect width="1200" height="900" fill="#8fd8ff"/>
+  <g fill="none" stroke-width="34" opacity=".85"><circle cx="600" cy="760" r="600" stroke="#ff5b6e"/><circle cx="600" cy="760" r="566" stroke="#ffb020"/><circle cx="600" cy="760" r="532" stroke="#ffe14d"/><circle cx="600" cy="760" r="498" stroke="#5fd068"/><circle cx="600" cy="760" r="464" stroke="#4aa8ff"/><circle cx="600" cy="760" r="430" stroke="#9b7cff"/></g>
+  <g transform="translate(150 140)"><circle r="80" fill="#ffd23a"/>${Array.from({ length: 12 }, (_, i) => `<path d="M0-100v-34" stroke="#ffd23a" stroke-width="12" stroke-linecap="round" transform="rotate(${i * 30})"/>`).join('')}
+    <circle cx="-26" cy="-14" r="9" fill="#1d2747"/><circle cx="26" cy="-14" r="9" fill="#1d2747"/><path d="M-30 20c16 20 44 20 60 0" stroke="#1d2747" stroke-width="7" fill="none" stroke-linecap="round"/></g>
+  <g fill="#fff"><g transform="translate(760 120)"><circle r="44"/><circle cx="50" cy="10" r="54"/><circle cx="110" cy="6" r="40"/><rect x="-40" y="10" width="190" height="44" rx="22"/></g>
+    <g transform="translate(420 230) scale(.7)"><circle r="44"/><circle cx="50" cy="10" r="54"/><circle cx="110" cy="6" r="40"/><rect x="-40" y="10" width="190" height="44" rx="22"/></g></g>
+  <path d="M0 600c200-90 420-90 620 0s400 70 580-20v320H0z" fill="#5fd068"/>
+  <path d="M0 680c260-60 520-40 760 10s320 30 440 0v210H0z" fill="#3fb85a"/>
+  <g transform="translate(320 400)"><rect x="0" y="80" width="260" height="210" fill="#ef3e4a" stroke="#1d2747" stroke-width="8"/>
+    <path d="M-30 90 130-30 290 90z" fill="#8a4b2a" stroke="#1d2747" stroke-width="8" stroke-linejoin="round"/>
+    <rect x="100" y="180" width="64" height="110" fill="#ffe14d" stroke="#1d2747" stroke-width="7"/><circle cx="150" cy="238" r="6" fill="#1d2747"/>
+    <rect x="28" y="120" width="54" height="50" fill="#9ee8ff" stroke="#1d2747" stroke-width="7"/><rect x="182" y="120" width="54" height="50" fill="#9ee8ff" stroke="#1d2747" stroke-width="7"/>
+    <rect x="190" y="-20" width="34" height="70" fill="#8a4b2a" stroke="#1d2747" stroke-width="7"/></g>
+  <path d="M432 690c-20 80 40 130 0 210h80c-30-80 30-130 0-210z" fill="#f4d58d"/>
+  <g transform="translate(900 360)"><rect x="-22" y="80" width="44" height="240" fill="#8a4b2a" stroke="#1d2747" stroke-width="7"/>
+    <circle cy="40" r="140" fill="#2f9e4a" stroke="#1d2747" stroke-width="8"/>
+    <circle cx="-60" cy="10" r="18" fill="#ef3e4a"/><circle cx="40" cy="-40" r="18" fill="#ef3e4a"/><circle cx="70" cy="70" r="18" fill="#ef3e4a"/><circle cx="-20" cy="100" r="18" fill="#ef3e4a"/></g>
+  <g transform="translate(1060 470)"><ellipse rx="44" ry="30" fill="#ff5b6e" stroke="#1d2747" stroke-width="5"/><path d="M0-30v60" stroke="#1d2747" stroke-width="5"/>
+    <circle cx="-18" cy="-6" r="7" fill="#1d2747"/><circle cx="18" cy="10" r="7" fill="#1d2747"/><circle cx="-44" cy="0" r="16" fill="#1d2747"/></g>
+  ${flowers}
+</svg>`;
+}
+
+const SAMPLES = [
+  { id: 's-space', name: 'Weltall', make: spaceSVG },
+  { id: 's-sea', name: 'Meer', make: seaSVG },
+  { id: 's-meadow', name: 'Wiese', make: meadowSVG },
+].map(s => ({ ...s, url: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s.make()) }));
+
+/* ================= Eigene Bilder (IndexedDB) ================= */
+let db = null;
+const own = []; // {id, url, blob}
+function openDB() {
+  return new Promise(res => {
+    try {
+      const req = indexedDB.open('bilder-puzzle', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('images', { keyPath: 'id', autoIncrement: true });
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+}
+const tx = (mode, fn) => new Promise((res, rej) => {
+  const t = db.transaction('images', mode); const r = fn(t.objectStore('images'));
+  t.oncomplete = () => res(r && r.result); t.onerror = () => rej(t.error);
+});
+async function loadOwn() {
+  db = await openDB();
+  if (!db) { $('storeNote').hidden = false; return; }
+  try {
+    const all = await tx('readonly', s => s.getAll());
+    all.sort((a, b) => b.id - a.id).forEach(r => own.push({ id: r.id, blob: r.blob, url: URL.createObjectURL(r.blob) }));
+  } catch (e) { $('storeNote').hidden = false; }
+  renderGallery();
+}
+let tempId = -1;
+async function addFiles(files) {
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue;
+    try {
+      const blob = await shrink(f);
+      let id = tempId--;
+      if (db) { try { id = await tx('readwrite', s => s.add({ blob, created: Date.now() })); } catch (e) {} }
+      own.unshift({ id, blob, url: URL.createObjectURL(blob) });
+    } catch (e) { /* Bild nicht lesbar */ }
+  }
+  renderGallery();
+}
+function loadImg(url) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+}
+async function shrink(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await loadImg(url);
+    const max = 2000, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(), 'image/jpeg', .88));
+  } finally { URL.revokeObjectURL(url); }
+}
+async function removeOwn(id) {
+  const i = own.findIndex(o => o.id === id); if (i < 0) return;
+  URL.revokeObjectURL(own[i].url); own.splice(i, 1);
+  if (db && id > 0) { try { await tx('readwrite', s => s.delete(id)); } catch (e) {} }
+  renderGallery();
+}
+$('fileInput').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+
+function renderGallery() {
+  const g = $('gallery');
+  g.querySelectorAll('.tile:not(.add)').forEach(t => t.remove());
+  const items = [...own.map(o => ({ ...o, own: true })), ...SAMPLES];
+  items.forEach(it => {
+    const t = document.createElement('button');
+    t.type = 'button'; t.className = 'tile';
+    t.setAttribute('aria-label', (it.name || 'Eigenes Bild') + ' puzzeln');
+    t.innerHTML = `<img alt="" src="${it.url}">` + (it.name ? `<span class="name">${it.name}</span>` : '');
+    t.addEventListener('click', () => startGame(it.url));
+    g.appendChild(t);
+    if (it.own) {
+      const d = document.createElement('button');
+      d.type = 'button'; d.className = 'del'; d.textContent = '✕'; d.setAttribute('aria-label', 'Bild löschen');
+      let timer;
+      d.addEventListener('click', e => {
+        e.stopPropagation();
+        if (d.classList.contains('armed')) { clearTimeout(timer); removeOwn(it.id); return; }
+        d.classList.add('armed'); d.textContent = 'Löschen?';
+        timer = setTimeout(() => { d.classList.remove('armed'); d.textContent = '✕'; }, 3000);
+      });
+      t.appendChild(d);
+    }
+  });
+}
+renderGallery();
+loadOwn();
+
+/* ================= Klänge ================= */
+let ac = null;
+function audio() {
+  if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+  if (ac.state === 'suspended') ac.resume();
+  return ac;
+}
+function tone(freq, start, dur, type = 'sine', vol = .18) {
+  const a = audio(); if (!a) return;
+  const o = a.createOscillator(), g = a.createGain(), t = a.currentTime + start;
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .01); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t + dur + .05);
+}
+const snapSound = () => { tone(660, 0, .12, 'triangle'); tone(990, .06, .16, 'triangle'); };
+const winSound = () => [523, 659, 784, 1046, 784, 1046].forEach((f, i) => tone(f, i * .12, .3, 'triangle', .2));
+
+/* ================= Spiel ================= */
+const game = $('game'), board = $('board');
+let P = null; // aktuelles Puzzle
+let zTop = 10;
+
+function bestGrid(n, aspect) {
+  let best = null;
+  for (let c = 1; c <= n; c++) {
+    if (n % c) continue;
+    const r = n / c, score = Math.abs(Math.log(aspect * r / c));
+    if (!best || score < best.score) best = { c, r, score };
+  }
+  return best;
+}
+
+async function startGame(url) {
+  let img;
+  try { img = await loadImg(url); } catch (e) { return; }
+  const n = settings.count, w = img.naturalWidth || 1200, h = img.naturalHeight || 900;
+  const { c: cols, r: rows } = bestGrid(n, w / h);
+  // Bild mittig zuschneiden, damit die Teile quadratisch sind
+  const target = cols / rows;
+  let sw = w, sh = h;
+  if (w / h > target) sw = h * target; else sh = w / target;
+  const sx = (w - sw) / 2, sy = (h - sh) / 2;
+  const scale = Math.min(1, 2400 / sw);
+  const crop = document.createElement('canvas');
+  crop.width = Math.round(sw * scale); crop.height = Math.round(crop.width / target);
+  crop.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, crop.width, crop.height);
+
+  const jig = settings.shape === 'jigsaw';
+  const sgn = () => Math.random() < .5 ? 1 : -1;
+  const hEdge = Array.from({ length: rows - 1 }, () => Array.from({ length: cols }, sgn));
+  const vEdge = Array.from({ length: rows }, () => Array.from({ length: cols - 1 }, sgn));
+
+  P = { url, crop, cols, rows, n, jig, pad: jig ? .25 : 0, pieces: [], placed: 0, done: false };
+  $('menu').hidden = true; game.hidden = false; $('win').hidden = true;
+  $('full').classList.remove('show'); board.style.zIndex = '';
+  game.querySelectorAll('.piece').forEach(p => p.remove());
+  requestWakeLock();
+
+  layout(true);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const cellPx = Math.max(40, Math.round(Math.min(P.cell * dpr * 1.25, crop.width / cols)));
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const edges = jig ? {
+      top: r === 0 ? 0 : -hEdge[r - 1][c], bottom: r === rows - 1 ? 0 : hEdge[r][c],
+      left: c === 0 ? 0 : -vEdge[r][c - 1], right: c === cols - 1 ? 0 : vEdge[r][c],
+    } : { top: 0, right: 0, bottom: 0, left: 0 };
+    const cv = renderPiece(crop, c, r, cellPx, P.pad, edges);
+    cv.className = 'piece';
+    const piece = { c, r, edges, el: cv, x: 0, y: 0, placed: false };
+    cv._piece = piece;
+    cv.addEventListener('pointerdown', onDown);
+    P.pieces.push(piece);
+    game.insertBefore(cv, $('confetti'));
+  }
+  scatter();
+  drawBoard();
+  updateCounter();
+}
+
+function tracePiece(ctx, s, e) {
+  const edge = (ax, ay, bx, by, sign) => {
+    if (!sign) { ctx.lineTo(bx, by); return; }
+    const dx = bx - ax, dy = by - ay, nx = dy * sign, ny = -dx * sign;
+    const p = (t, h) => [ax + dx * t + nx * h, ay + dy * t + ny * h];
+    ctx.lineTo(...p(.35, 0));
+    ctx.bezierCurveTo(...p(.45, .02), ...p(.29, .24), ...p(.5, .24));
+    ctx.bezierCurveTo(...p(.71, .24), ...p(.55, .02), ...p(.65, 0));
+    ctx.lineTo(bx, by);
+  };
+  ctx.moveTo(0, 0);
+  edge(0, 0, s, 0, e.top); edge(s, 0, s, s, e.right); edge(s, s, 0, s, e.bottom); edge(0, s, 0, 0, e.left);
+  ctx.closePath();
+}
+
+function renderPiece(crop, c, r, s, pad, edges) {
+  const cv = document.createElement('canvas');
+  const off = Math.round(s * pad);
+  cv.width = cv.height = s + 2 * off;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.translate(off, off);
+  ctx.beginPath(); tracePiece(ctx, s, edges);
+  ctx.save(); ctx.clip();
+  ctx.drawImage(crop, -c * s, -r * s, P.cols * s, P.rows * s);
+  ctx.restore();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(1.5, s * .018); ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.stroke();
+  ctx.lineWidth = Math.max(1, s * .006); ctx.strokeStyle = 'rgba(20,30,60,.35)'; ctx.stroke();
+  return cv;
+}
+
+/* Rahmen mittig, Teile rundherum. Teilegrösse so wählen, dass alle neben den Rahmen passen. */
+function layout(fresh) {
+  const W = game.clientWidth, H = game.clientHeight;
+  const m = Math.max(10, Math.min(W, H) * .02);
+  const top = 72; // Platz für Knöpfe
+  const foot = P.jig ? 1.45 : 1.12;
+  let cell = Math.min(
+    Math.sqrt(W * (H - top) / (P.n * (1 + foot * foot * 1.25))),
+    (W - 2 * m) * .9 / P.cols, (H - top - m) * .92 / P.rows);
+  let slots = [], bx, by;
+  for (let k = 0; k < 40; k++) {
+    bx = (W - P.cols * cell) / 2;
+    by = top + (H - top - m - P.rows * cell) / 2;
+    if (!fresh) break;
+    slots = freeSlots(W, H, m, top, cell, foot, bx, by);
+    if (slots.length >= P.n) break;
+    cell *= .95;
+  }
+  P.cell = cell; P.bx = bx; P.by = by; P.W = W; P.H = H; P.slots = slots;
+  Object.assign(board.style, { left: bx + 'px', top: by + 'px', width: P.cols * cell + 'px', height: P.rows * cell + 'px' });
+}
+
+function freeSlots(W, H, m, top, cell, foot, bx, by) {
+  const step = cell * foot, out = [];
+  const gap = cell * (P.jig ? .3 : .15);
+  const ex = { l: bx - gap, t: by - gap, r: bx + P.cols * cell + gap, b: by + P.rows * cell + gap };
+  const nx = Math.floor((W - 2 * m) / step), ny = Math.floor((H - top - m) / step);
+  const ox = (W - nx * step) / 2, oy = top + (H - top - m - ny * step) / 2;
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const l = ox + i * step, t = oy + j * step;
+    if (l + step <= ex.l || l >= ex.r || t + step <= ex.t || t >= ex.b) out.push({ cx: l + step / 2, cy: t + step / 2 });
+  }
+  // Ecken mit den Knöpfen freihalten
+  return out.filter(s => !(s.cx < 110 && s.cy < 110) && !(s.cx > W - 90 && s.cy < 150));
+}
+
+function scatter() {
+  const slots = P.slots.slice();
+  for (let i = slots.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [slots[i], slots[j]] = [slots[j], slots[i]]; }
+  const order = P.pieces.slice().sort(() => Math.random() - .5);
+  order.forEach((p, i) => {
+    let sx, sy;
+    if (i < slots.length) {
+      const jit = P.cell * .06;
+      sx = slots[i].cx + rnd(-jit, jit); sy = slots[i].cy + rnd(-jit, jit);
+    } else { // Notfall: sehr kleiner Bildschirm
+      sx = rnd(P.cell, P.W - P.cell); sy = rnd(80 + P.cell / 2, P.H - P.cell);
+    }
+    p.x = (sx - P.cell / 2 - P.bx) / P.cell;
+    p.y = (sy - P.cell / 2 - P.by) / P.cell;
+    p.el.style.zIndex = ++zTop;
+    place(p);
+  });
+}
+
+function place(p) {
+  const size = P.cell * (1 + 2 * P.pad);
+  p.el.style.width = p.el.style.height = size + 'px';
+  const left = P.bx + (p.x - P.pad) * P.cell, top = P.by + (p.y - P.pad) * P.cell;
+  p.el.style.transform = `translate(${left}px, ${top}px)`;
+}
+
+function drawBoard() {
+  const cv = $('boardCanvas'), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = P.cols * P.cell, h = P.rows * P.cell;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  if (settings.ghost) { ctx.globalAlpha = .28; ctx.drawImage(P.crop, 0, 0, w, h); ctx.globalAlpha = 1; }
+  ctx.strokeStyle = 'rgba(29,39,71,.22)'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
+  for (const p of P.pieces) {
+    ctx.save(); ctx.translate(p.c * P.cell, p.r * P.cell); ctx.beginPath(); tracePiece(ctx, P.cell, p.edges); ctx.stroke(); ctx.restore();
+  }
+  const full = $('full');
+  full.width = cv.width; full.height = cv.height;
+  full.getContext('2d').drawImage(P.crop, 0, 0, full.width, full.height);
+}
+
+function updateCounter() { $('counter').textContent = `${P.placed} / ${P.n}`; }
+
+/* ----- Ziehen ----- */
+function opaqueAt(el, clientX, clientY) {
+  const r = el.getBoundingClientRect();
+  const x = Math.floor((clientX - r.left) / r.width * el.width), y = Math.floor((clientY - r.top) / r.height * el.height);
+  if (x < 0 || y < 0 || x >= el.width || y >= el.height) return false;
+  try { return el.getContext('2d').getImageData(x, y, 1, 1).data[3] > 20; } catch (e) { return true; }
+}
+const drags = new Map();
+function onDown(e) {
+  if (!P || P.done) return;
+  let el = e.currentTarget;
+  if (!opaqueAt(el, e.clientX, e.clientY)) {
+    // durchsichtige Ecke angetippt: Teil darunter suchen
+    el = document.elementsFromPoint(e.clientX, e.clientY)
+      .find(x => x._piece && !x._piece.placed && !drags.has(x) && opaqueAt(x, e.clientX, e.clientY));
+    if (!el) return;
+  }
+  if (drags.has(el)) return;
+  e.preventDefault();
+  audio();
+  const p = el._piece;
+  el.setPointerCapture(e.pointerId);
+  el.classList.add('drag'); el.classList.remove('snap');
+  el.style.zIndex = ++zTop;
+  const px = P.bx + p.x * P.cell, py = P.by + p.y * P.cell;
+  drags.set(el, { id: e.pointerId, dx: e.clientX - px, dy: e.clientY - py });
+  const move = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    const d = drags.get(el);
+    const gx = Math.max(-P.cell * .4, Math.min(P.W - P.cell * .6, ev.clientX - d.dx));
+    const gy = Math.max(-P.cell * .4, Math.min(P.H - P.cell * .6, ev.clientY - d.dy));
+    p.x = (gx - P.bx) / P.cell; p.y = (gy - P.by) / P.cell;
+    place(p);
+  };
+  const up = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+    drags.delete(el); el.classList.remove('drag');
+    if (Math.hypot(p.x - p.c, p.y - p.r) < .33) lock(p);
+  };
+  el.addEventListener('pointermove', move);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+}
+
+function lock(p) {
+  p.placed = true; p.x = p.c; p.y = p.r;
+  p.el.classList.add('snap', 'placed');
+  p.el.style.zIndex = 2;
+  place(p);
+  P.placed++; updateCounter();
+  snapSound();
+  if (P.placed === P.n) win();
+}
+
+/* ----- Geschafft ----- */
+function win() {
+  P.done = true;
+  setTimeout(() => { board.style.zIndex = 3000; $('full').classList.add('show'); winSound(); confetti(); }, 250);
+  setTimeout(() => { $('win').hidden = false; $('again').focus({ preventScroll: true }); }, 1100);
+}
+let confettiRun = 0;
+function confetti() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cv = $('confetti'), ctx = cv.getContext('2d'), run = ++confettiRun;
+  cv.width = game.clientWidth; cv.height = game.clientHeight;
+  const colors = ['#ffc531', '#f0473c', '#2fa55a', '#4aa8ff', '#b07cff', '#ff7ad0'];
+  const bits = Array.from({ length: 160 }, () => ({
+    x: cv.width / 2 + rnd(-60, 60), y: cv.height * .55, vx: rnd(-9, 9), vy: rnd(-19, -7),
+    s: rnd(7, 14), a: rnd(0, 6), va: rnd(-.3, .3), c: colors[Math.floor(Math.random() * colors.length)],
+  }));
+  const t0 = performance.now();
+  (function frame(t) {
+    if (run !== confettiRun) return;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    for (const b of bits) {
+      b.vy += .38; b.vx *= .99; b.x += b.vx; b.y += b.vy; b.a += b.va;
+      ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.a); ctx.fillStyle = b.c; ctx.fillRect(-b.s / 2, -b.s / 4, b.s, b.s / 2); ctx.restore();
+    }
+    if (t - t0 < 4000) requestAnimationFrame(frame); else ctx.clearRect(0, 0, cv.width, cv.height);
+  })(t0);
+}
+
+/* ----- Knöpfe ----- */
+function toMenu() {
+  confettiRun++; $('confetti').getContext('2d').clearRect(0, 0, 1e5, 1e5);
+  game.hidden = true; $('menu').hidden = false; P = null;
+  releaseWakeLock();
+}
+$('back').addEventListener('click', toMenu);
+$('other').addEventListener('click', toMenu);
+$('again').addEventListener('click', () => { confettiRun++; startGame(P.url); });
+$('ghostBtn').addEventListener('click', () => { settings.ghost = !settings.ghost; saveSettings(); syncSettings(); if (P) drawBoard(); });
+
+/* ----- Grösse ändern (Drehen des Tablets) ----- */
+let rt;
+window.addEventListener('resize', () => {
+  clearTimeout(rt);
+  rt = setTimeout(() => {
+    if (!P || game.hidden) return;
+    layout(false);
+    for (const p of P.pieces) {
+      if (!p.placed) {
+        const gx = Math.max(0, Math.min(P.W - P.cell, P.bx + p.x * P.cell));
+        const gy = Math.max(0, Math.min(P.H - P.cell, P.by + p.y * P.cell));
+        p.x = (gx - P.bx) / P.cell; p.y = (gy - P.by) / P.cell;
+      }
+      place(p);
+    }
+    drawBoard();
+  }, 120);
+});
+
+/* ----- Bildschirm anlassen ----- */
+let wake = null;
+async function requestWakeLock() { try { wake = await navigator.wakeLock.request('screen'); } catch (e) { wake = null; } }
+function releaseWakeLock() { try { wake && wake.release(); } catch (e) {} wake = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && P && !game.hidden) requestWakeLock(); });
+})();
+</script>
+</body>
+</html>

@@ -50,6 +50,11 @@ npm test             # Tests für den Strichcode-Parser
 | `js/research.js` | KI-Recherche mit Claude (Websuche, strukturierte Rückgabe) |
 | `vendor/` | ZXing (Apache-2.0), qrcode-generator (MIT), Tesseract.js (Apache-2.0), Anthropic SDK (MIT) |
 
+## Bilder-Puzzle für Kinder
+
+`puzzle/index.html` ist ein eigenständiges Puzzle-Spiel (unabhängig von Apoko), online unter `https://<user>.github.io/apoko/puzzle/`.
+Eigene Fotos hinzufügen, Anzahl Teile wählen (4 bis 48), Quadrate oder echte Puzzleteile. Die Teile liegen rund um den Rahmen und rasten ein, wenn sie am richtigen Platz sind. Eigene Bilder bleiben auf dem Gerät (IndexedDB).
+
 ## Grenzen / mögliche nächste Schritte
 
 - **Keine automatische Produktdatenbank**: In der Schweiz gibt es keine frei nutzbare Schnittstelle für Medikamentennamen. Der Name wird deshalb beim ersten Mal eingetippt und danach gespeichert. Später ließe sich das z. B. mit der Refdata- oder HCI-Datenbank anbinden (Lizenz nötig).
